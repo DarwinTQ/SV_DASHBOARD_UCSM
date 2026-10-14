@@ -1,0 +1,33 @@
+{% extends "monitoreo/base.html" %}
+{% block titulo %}Dispositivos{% endblock %}
+{% block contenido %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h1 class="h4 mb-0">Dispositivos</h1>
+  <a href="{% url 'monitoreo:dispositivo_crear' %}" class="btn btn-verde"><i class="bi bi-plus-lg"></i> Nuevo dispositivo</a>
+</div>
+
+<div class="tarjeta">
+  <div class="tabla-wrapper">
+    <table class="tabla-datos">
+      <thead><tr><th>Código</th><th>Vehículo</th><th>Estado</th><th>IP</th><th>Último contacto</th><th></th></tr></thead>
+      <tbody>
+        {% for dispositivo in dispositivos %}
+        <tr>
+          <td>{{ dispositivo.codigo }}</td>
+          <td>{{ dispositivo.vehiculo.placa }}</td>
+          <td><span class="badge-estado">{{ dispositivo.get_estado_display }}</span></td>
+          <td>{{ dispositivo.ip|default:"—" }}</td>
+          <td>{{ dispositivo.ultimo_contacto|date:"d/m/Y H:i:s"|default:"Sin contacto" }}</td>
+          <td>
+            <a href="{% url 'monitoreo:dispositivo_detalle' dispositivo.pk %}" class="btn btn-sm btn-verde-contorno">Ver</a>
+            <a href="{% url 'monitoreo:dispositivo_editar' dispositivo.pk %}" class="btn btn-sm btn-verde-contorno">Editar</a>
+            <a href="{% url 'monitoreo:dispositivo_eliminar' dispositivo.pk %}" class="btn btn-sm btn-verde-contorno">Eliminar</a>
+          </td>
+        </tr>
+        {% empty %}<tr><td colspan="6" class="text-center text-muted">No hay dispositivos registrados.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "monitoreo/componentes/_paginacion.html" %}
+</div>
+{% endblock %}

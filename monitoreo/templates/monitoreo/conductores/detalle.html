@@ -1,0 +1,23 @@
+{% extends "monitoreo/base.html" %}
+{% block titulo %}{{ conductor.nombre_completo }}{% endblock %}
+{% block contenido %}
+<h1 class="h4 mb-3">{{ conductor.nombre_completo }}</h1>
+<div class="tarjeta" style="max-width:640px;">
+  <table class="table table-sm mb-3">
+    <tr><th>DNI</th><td>{{ conductor.dni }}</td></tr>
+    <tr><th>Teléfono</th><td>{{ conductor.telefono }}</td></tr>
+    <tr><th>Correo</th><td>{{ conductor.correo|default:"—" }}</td></tr>
+    <tr><th>Telegram chat_id</th><td>{{ conductor.telegram_chat_id|default:"Sin configurar" }}</td></tr>
+    <tr><th>Dirección</th><td>{{ conductor.direccion|default:"—" }}</td></tr>
+    <tr><th>Registrado</th><td>{{ conductor.fecha_registro|date:"d/m/Y H:i" }}</td></tr>
+  </table>
+  <h2 class="h6">Vehículos</h2>
+  <ul>
+    {% for vehiculo in conductor.vehiculos.all %}
+    <li><a href="{% url 'monitoreo:vehiculo_detalle' vehiculo.pk %}">{{ vehiculo }}</a></li>
+    {% empty %}<li class="text-muted">Sin vehículos registrados.</li>{% endfor %}
+  </ul>
+  <a href="{% url 'monitoreo:conductor_editar' conductor.pk %}" class="btn btn-verde-contorno">Editar</a>
+  <a href="{% url 'monitoreo:conductor_lista' %}" class="btn btn-link">Volver</a>
+</div>
+{% endblock %}

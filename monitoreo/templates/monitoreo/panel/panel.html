@@ -1,0 +1,127 @@
+{% extends "monitoreo/base.html" %}
+{% load static monitoreo_extras %}
+{% block titulo %}Panel en tiempo real{% endblock %}
+
+{% block contenido %}
+<h1 class="h4 mb-3">Panel en tiempo real</h1>
+
+<div class="kpis mb-3">
+  <div class="kpi">
+    <div class="kpi__etiqueta">Incidencias hoy</div>
+    <div class="kpi__valor" id="kpi-incidencias-hoy">{{ kpis.incidencias_hoy }}</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi__etiqueta">Alertas enviadas hoy</div>
+    <div class="kpi__valor" id="kpi-alertas-hoy">{{ kpis.alertas_hoy }}</div>
+    <div class="kpi__detalle">Tasa de éxito: {% if kpis.alertas_tasa_exito is not None %}{{ kpis.alertas_tasa_exito }}%{% else %}—{% endif %}</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi__etiqueta">Tiempo de respuesta promedio</div>
+    <div class="kpi__valor" id="kpi-tiempo-respuesta">
+      {% if kpis.tiempo_respuesta_promedio_ms %}{{ kpis.tiempo_respuesta_promedio_ms }}{% else %}—{% endif %}
+    </div>
+    <div class="kpi__detalle">ms (hoy)</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi__etiqueta">Dispositivos registrados</div>
+    <div class="kpi__valor">{{ dispositivos|length }}</div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-lg-6">
+    <div class="tarjeta">
+      <h2 class="tarjeta__titulo"><i class="bi bi-cpu"></i> Estado del nodo</h2>
+      <div id="estado-dispositivos">
+        {% for dispositivo in dispositivos %}
+        <div class="d-flex justify-content-between align-items-center border-bottom py-2" data-dispositivo="{{ dispositivo.codigo }}">
+          <div>
+            <strong>{{ dispositivo.codigo }}</strong> · {{ dispositivo.vehiculo.placa }}
+            <div class="small text-muted" data-campo="detalle">
+              {% if dispositivo.ultimo_contacto %}Último contacto: {{ dispositivo.ultimo_contacto|date:"d/m/Y H:i:s" }}{% else %}Sin contacto registrado{% endif %}
+            </div>
+          </div>
+          <div class="text-end">
+            <span class="badge-estado" data-campo="armado">{% if dispositivo.armado %}Armado{% else %}Desarmado{% endif %}</span>
+            <div class="form-check form-switch d-inline-block ms-2">
+              <input class="form-check-input interruptor-armado" type="checkbox" role="switch"
+                     data-dispositivo-id="{{ dispositivo.pk }}" {% if dispositivo.armado %}checked{% endif %}>
+            </div>
+          </div>
+        </div>
+        {% empty %}
+        <p class="text-muted mb-0">Aún no hay dispositivos registrados.</p>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="tarjeta">
+      <h2 class="tarjeta__titulo"><i class="bi bi-camera-video"></i> Cámara en vivo</h2>
+      <img id="frame-camara" src="" alt="Último frame de la cámara" class="img-fluid rounded d-none" style="border:1px solid var(--verde-20);">
+      <p class="text-muted mb-0" id="camara-sin-datos">Esperando el primer frame de la cámara…</p>
+      <div class="small mt-2 text-muted">
+        FPS: <span id="camara-fps">—</span> · Personas: <span id="camara-personas">—</span> ·
+        Latencia de captura: <span id="camara-latencia">—</span> ms
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="tarjeta">
+      <h2 class="tarjeta__titulo"><i class="bi bi-graph-up"></i> Telemetría en vivo</h2>
+      <canvas id="grafica-telemetria" height="180"></canvas>
+    </div>
+
+    <div class="tarjeta">
+      <h2 class="tarjeta__titulo"><i class="bi bi-geo-alt"></i> Mapa</h2>
+      <div id="mapa-panel" style="height: 260px; border-radius: 10px;"></div>
+    </div>
+  </div>
+</div>
+
+<div class="tarjeta">
+  <h2 class="tarjeta__titulo"><i class="bi bi-list-ul"></i> Feed de incidencias</h2>
+  <div class="tabla-wrapper">
+    <table class="tabla-datos" id="tabla-feed-incidencias">
+      <thead>
+        <tr><th></th><th>Fecha/hora</th><th>Tipo</th><th>Riesgo</th><th>Placa</th><th></th></tr>
+      </thead>
+      <tbody id="cuerpo-feed-incidencias">
+        {% for incidencia in incidencias_recientes %}
+        <tr>
+          <td>
+            {% if incidencia.imagen_anotada %}
+              <img src="{{ incidencia.imagen_anotada.url }}" class="tabla-miniatura" alt="">
+            {% elif incidencia.imagen %}
+              <img src="{{ incidencia.imagen.url }}" class="tabla-miniatura" alt="">
+            {% endif %}
+          </td>
+          <td>{{ incidencia.fecha_hora|date:"d/m/Y H:i:s" }}</td>
+          <td>{{ incidencia.tipo.nombre }}</td>
+          <td>{% include "monitoreo/componentes/_badge_riesgo.html" with riesgo=incidencia.tipo.nivel_riesgo %}</td>
+          <td>{{ incidencia.dispositivo.vehiculo.placa }}</td>
+          <td><a href="{% url 'monitoreo:incidencia_detalle' incidencia.pk %}" class="btn btn-sm btn-verde-contorno">Ver</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="6" class="text-center text-muted">Sin incidencias todavía.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'vendor/chartjs/chart.umd.min.js' %}"></script>
+<script src="{% static 'monitoreo/js/panel.js' %}"></script>
+<script src="{% static 'monitoreo/js/mapa.js' %}"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    new PanelTiempoReal({
+      urlWebSocket: (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws/panel/",
+      urlEstado: "{% url 'api_panel_estado' %}",
+      googleMapsApiKey: "{{ google_maps_api_key }}",
+    }).iniciar();
+  });
+</script>
+{% endblock %}

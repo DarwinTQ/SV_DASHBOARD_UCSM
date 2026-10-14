@@ -1,0 +1,13 @@
+{% extends "monitoreo/base.html" %}
+{% block titulo %}Eliminar conductor{% endblock %}
+{% block contenido %}
+<h1 class="h4 mb-3">Eliminar conductor</h1>
+<div class="tarjeta" style="max-width:520px;">
+  <p>¿Confirmas eliminar a <strong>{{ object }}</strong>? Esta acción no se puede deshacer.</p>
+  <form method="post">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-verde">Sí, eliminar</button>
+    <a href="{% url 'monitoreo:conductor_lista' %}" class="btn btn-link">Cancelar</a>
+  </form>
+</div>
+{% endblock %}

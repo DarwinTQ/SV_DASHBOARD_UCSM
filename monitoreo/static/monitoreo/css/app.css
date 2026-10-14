@@ -1,0 +1,303 @@
+/* ==========================================================================
+   Sistema de diseño — Sistema de Monitoreo Vehicular Inteligente · UCSM
+   Solo dos colores: verde #0cb967 y blanco. Variantes tonales del mismo
+   verde para legibilidad (sección 9.1 del documento de especificación).
+   ========================================================================== */
+
+@font-face {
+  font-family: "Montserrat";
+  src: url("../../../vendor/fonts/montserrat-600.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Montserrat";
+  src: url("../../../vendor/fonts/montserrat-700.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Open Sans";
+  src: url("../../../vendor/fonts/open-sans-400.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Open Sans";
+  src: url("../../../vendor/fonts/open-sans-600.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
+
+:root {
+  --verde: #0cb967;
+  --verde-oscuro: #07854a;
+  --verde-texto: #0a3d24;
+  --verde-10: rgba(12, 185, 103, .10);
+  --verde-20: rgba(12, 185, 103, .20);
+  --verde-40: rgba(12, 185, 103, .40);
+  --blanco: #ffffff;
+
+  --fuente-titulos: "Montserrat", system-ui, "Segoe UI", sans-serif;
+  --fuente-texto: "Open Sans", system-ui, "Segoe UI", sans-serif;
+
+  --topbar-alto: 64px;
+  --sidebar-ancho: 260px;
+}
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  background: var(--blanco);
+  color: var(--verde-texto);
+  font-family: var(--fuente-texto);
+  font-variant-numeric: tabular-nums;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background: url("../img/logo_ucsm_fondo.png") center/min(75vw, 900px) no-repeat;
+  opacity: .07;
+}
+
+h1, h2, h3, h4, h5, h6, .titulo {
+  font-family: var(--fuente-titulos);
+  font-weight: 700;
+  color: var(--verde-texto);
+}
+
+a { color: var(--verde-oscuro); }
+a:hover { color: var(--verde-texto); }
+
+:focus-visible {
+  outline: 2px solid var(--verde);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------- Layout */
+
+.app {
+  position: relative;
+  z-index: 1;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  height: var(--topbar-alto);
+  background: var(--blanco);
+  border-bottom: 3px solid var(--verde);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1rem;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+.topbar__marca {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+}
+
+.topbar__logo { height: 42px; }
+
+.topbar__titulos { display: flex; flex-direction: column; line-height: 1.1; }
+.topbar__titulos .titulo-principal { font-family: var(--fuente-titulos); font-weight: 700; font-size: 1rem; }
+.topbar__titulos .subtitulo { font-size: .75rem; color: var(--verde-oscuro); font-weight: 600; }
+
+.topbar__acciones { display: flex; align-items: center; gap: 1rem; }
+
+.indicador-conexion { display: inline-flex; align-items: center; gap: .4rem; font-size: .8rem; font-weight: 600; }
+.indicador-conexion .punto {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--verde);
+  box-shadow: 0 0 0 0 var(--verde-40);
+}
+.indicador-conexion.conectado .punto { animation: pulso 1.6s infinite; }
+.indicador-conexion.reconectando .punto { background: transparent; border: 2px solid var(--verde); }
+
+@keyframes pulso {
+  0% { box-shadow: 0 0 0 0 var(--verde-40); }
+  70% { box-shadow: 0 0 0 8px rgba(12, 185, 103, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(12, 185, 103, 0); }
+}
+
+.reloj-vivo { font-weight: 600; font-size: .85rem; }
+
+.cuerpo { display: flex; flex: 1; min-height: 0; }
+
+.sidebar {
+  width: var(--sidebar-ancho);
+  background: var(--verde);
+  color: var(--blanco);
+  flex-shrink: 0;
+  padding: 1rem .75rem;
+  position: sticky;
+  top: var(--topbar-alto);
+  height: calc(100vh - var(--topbar-alto));
+  overflow-y: auto;
+  z-index: 20;
+}
+
+.sidebar__seccion { margin-top: 1.25rem; }
+.sidebar__seccion:first-child { margin-top: 0; }
+.sidebar__titulo-seccion {
+  font-size: .7rem; text-transform: uppercase; letter-spacing: .08em;
+  opacity: .8; font-weight: 700; margin: 0 .5rem .4rem;
+}
+
+.sidebar__enlace {
+  display: flex; align-items: center; gap: .6rem;
+  padding: .55rem .75rem; border-radius: 10px;
+  color: var(--blanco); font-weight: 600; font-size: .9rem;
+  text-decoration: none; margin-bottom: .15rem;
+}
+.sidebar__enlace:hover { background: rgba(255, 255, 255, .12); color: var(--blanco); }
+.sidebar__enlace.activo { background: var(--blanco); color: var(--verde-oscuro); }
+.sidebar__enlace .bi { font-size: 1.05rem; width: 1.2rem; text-align: center; }
+
+.sidebar__contador {
+  margin-left: auto; background: var(--blanco); color: var(--verde-oscuro);
+  border-radius: 999px; font-size: .7rem; font-weight: 700; padding: .05rem .45rem;
+}
+.sidebar__enlace.activo .sidebar__contador { background: var(--verde-10); color: var(--verde-oscuro); }
+
+.contenido { flex: 1; min-width: 0; padding: 1.25rem; }
+
+.pie-pagina {
+  text-align: center; font-size: .75rem; color: var(--verde-oscuro);
+  opacity: .7; padding: 1rem;
+}
+
+/* --------------------------------------------------------------- Tarjetas */
+
+.tarjeta {
+  background: rgba(255, 255, 255, .92);
+  backdrop-filter: blur(2px);
+  border: 1px solid var(--verde-20);
+  border-radius: 14px;
+  box-shadow: 0 2px 10px var(--verde-10);
+  padding: 1.1rem;
+  margin-bottom: 1.1rem;
+}
+
+.tarjeta__titulo {
+  font-family: var(--fuente-titulos);
+  font-weight: 700;
+  font-size: 1rem;
+  margin: 0 0 .85rem;
+  display: flex; align-items: center; gap: .5rem;
+}
+
+/* -------------------------------------------------------------------- KPI */
+
+.kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+.kpi {
+  background: var(--blanco); border: 1px solid var(--verde-20); border-radius: 14px;
+  padding: 1rem; box-shadow: 0 2px 10px var(--verde-10);
+}
+.kpi__etiqueta { font-size: .8rem; font-weight: 600; color: var(--verde-oscuro); margin-bottom: .3rem; }
+.kpi__valor { font-family: var(--fuente-titulos); font-size: 1.8rem; font-weight: 700; color: var(--verde-texto); }
+.kpi__detalle { font-size: .75rem; color: var(--verde-oscuro); opacity: .85; }
+
+/* ---------------------------------------------------------------- Badges */
+
+.badge-riesgo {
+  display: inline-flex; align-items: center; gap: .3rem;
+  font-size: .75rem; font-weight: 700; padding: .25rem .6rem; border-radius: 999px;
+}
+.badge-riesgo--alto { background: var(--verde); color: var(--blanco); }
+.badge-riesgo--medio { background: var(--blanco); color: var(--verde-oscuro); border: 1.5px solid var(--verde); }
+.badge-riesgo--bajo { background: var(--verde-10); color: var(--verde-oscuro); }
+
+.badge-estado {
+  display: inline-flex; align-items: center; gap: .3rem;
+  font-size: .72rem; font-weight: 700; padding: .2rem .55rem; border-radius: 999px;
+  border: 1px solid var(--verde-40); color: var(--verde-oscuro); background: var(--verde-10);
+}
+
+.dispositivo-offline { opacity: .55; text-decoration: line-through; }
+.dispositivo-offline .bi { color: var(--verde-oscuro); }
+
+/* ----------------------------------------------------------------- Botones */
+
+.btn-verde {
+  background: var(--verde); border-color: var(--verde); color: var(--blanco); font-weight: 600;
+}
+.btn-verde:hover, .btn-verde:focus { background: var(--verde-oscuro); border-color: var(--verde-oscuro); color: var(--blanco); }
+
+.btn-verde-contorno {
+  background: transparent; border: 1.5px solid var(--verde); color: var(--verde-oscuro); font-weight: 600;
+}
+.btn-verde-contorno:hover { background: var(--verde-10); color: var(--verde-texto); }
+
+/* ------------------------------------------------------------------ Tabla */
+
+.tabla-wrapper { overflow-x: auto; }
+table.tabla-datos { width: 100%; border-collapse: collapse; font-size: .9rem; }
+table.tabla-datos th {
+  text-align: left; font-family: var(--fuente-titulos); font-weight: 700;
+  color: var(--verde-oscuro); border-bottom: 2px solid var(--verde-20); padding: .55rem .6rem;
+}
+table.tabla-datos td { padding: .55rem .6rem; border-bottom: 1px solid var(--verde-10); vertical-align: middle; }
+table.tabla-datos tr:hover td { background: var(--verde-10); }
+.tabla-miniatura { width: 56px; height: 56px; object-fit: cover; border-radius: 8px; border: 1px solid var(--verde-20); }
+
+/* ---------------------------------------------------------------- Toasts */
+
+.toast-contenedor { position: fixed; top: calc(var(--topbar-alto) + 1rem); right: 1rem; z-index: 1080; }
+.toast-ucsm {
+  background: var(--blanco); border: 1px solid var(--verde-40); border-left: 5px solid var(--verde);
+  border-radius: 10px; box-shadow: 0 4px 16px var(--verde-20); padding: .75rem 1rem;
+  margin-bottom: .6rem; min-width: 280px; max-width: 360px; animation: entrada-toast .25s ease-out;
+}
+@keyframes entrada-toast { from { transform: translateX(16px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+/* --------------------------------------------------------------- Formularios */
+
+.form-label { font-weight: 600; color: var(--verde-texto); }
+.form-control:focus, .form-select:focus {
+  border-color: var(--verde); box-shadow: 0 0 0 .2rem var(--verde-10);
+}
+
+/* -------------------------------------------------------------- Línea de tiempo */
+
+.linea-tiempo-etapas { display: flex; height: 28px; border-radius: 8px; overflow: hidden; border: 1px solid var(--verde-20); }
+.linea-tiempo-etapas__segmento { display: flex; align-items: center; justify-content: center; font-size: .68rem; color: var(--blanco); font-weight: 700; }
+.linea-tiempo-etapas__segmento:nth-child(odd) { background: var(--verde); }
+.linea-tiempo-etapas__segmento:nth-child(even) { background: var(--verde-oscuro); }
+
+/* ------------------------------------------------------------------ Login */
+
+.pantalla-login {
+  min-height: 100vh; display: flex; align-items: center; justify-content: center; position: relative; z-index: 1;
+}
+.tarjeta-login { width: 100%; max-width: 380px; text-align: center; }
+.tarjeta-login .topbar__logo { height: 56px; margin-bottom: 1rem; }
+
+/* -------------------------------------------------------------- Responsive */
+
+@media (max-width: 991.98px) {
+  .sidebar { position: fixed; left: -100%; top: 0; height: 100vh; transition: left .2s ease; }
+  .sidebar.mostrar { left: 0; }
+  .kpis { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 575.98px) {
+  .kpis { grid-template-columns: 1fr; }
+  .contenido { padding: .75rem; }
+  .topbar__titulos .subtitulo { display: none; }
+}
+
+img { max-width: 100%; }

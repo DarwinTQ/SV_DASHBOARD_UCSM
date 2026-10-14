@@ -1,0 +1,3 @@
+fecha_hora,chat_id_hash,rol,comando,placa,exito,tiempo_respuesta_ms,tiempo_captura_ms,tiempo_inferencia_ms,error
+2026-10-13T06:47:52.009522+00:00,f6e0a1e2ac41,SIN_VINCULAR,callback:ok,,True,0.7,,,
+2026-10-13T06:47:52.011918+00:00,f6e0a1e2ac41,SIN_VINCULAR,ayuda,,True,0.6,,,

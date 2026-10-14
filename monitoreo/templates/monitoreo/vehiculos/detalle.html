@@ -1,0 +1,89 @@
+{% extends "monitoreo/base.html" %}
+{% block titulo %}{{ vehiculo }}{% endblock %}
+{% block contenido %}
+<h1 class="h4 mb-3">{{ vehiculo }}</h1>
+<div class="tarjeta" style="max-width:640px;">
+  <table class="table table-sm mb-3">
+    <tr><th>Placa</th><td>{{ vehiculo.placa }}</td></tr>
+    <tr><th>Marca/Modelo</th><td>{{ vehiculo.marca }} {{ vehiculo.modelo }} ({{ vehiculo.anio }})</td></tr>
+    <tr><th>Color</th><td>{{ vehiculo.color }}</td></tr>
+    <tr><th>Tipo</th><td>{{ vehiculo.get_tipo_display }}</td></tr>
+    <tr><th>Conductor</th><td><a href="{% url 'monitoreo:conductor_detalle' vehiculo.conductor.pk %}">{{ vehiculo.conductor.nombre_completo }}</a></td></tr>
+    <tr><th>Activo</th><td>{% if vehiculo.activo %}Sí{% else %}No{% endif %}</td></tr>
+  </table>
+  {% if vehiculo.dispositivo %}
+  <p><a href="{% url 'monitoreo:dispositivo_detalle' vehiculo.dispositivo.pk %}">Ver dispositivo asociado: {{ vehiculo.dispositivo.codigo }}</a></p>
+  {% else %}<p class="text-muted">Este vehículo no tiene un dispositivo asignado.</p>{% endif %}
+  <a href="{% url 'monitoreo:vehiculo_editar' vehiculo.pk %}" class="btn btn-verde-contorno">Editar</a>
+  <a href="{% url 'monitoreo:vehiculo_lista' %}" class="btn btn-link">Volver</a>
+</div>
+
+<div class="tarjeta" style="max-width:640px;">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h2 class="tarjeta__titulo mb-0"><i class="bi bi-telegram"></i> Acceso por Telegram</h2>
+    <button type="button" class="btn btn-sm btn-verde" data-bs-toggle="collapse" data-bs-target="#form-invitar">
+      <i class="bi bi-person-plus"></i> Invitar familiar
+    </button>
+  </div>
+
+  <div class="collapse mb-3" id="form-invitar">
+    <form id="form-invitar-telegram" class="row gx-2 gy-2 align-items-end">
+      <div class="col-sm-5"><input type="text" name="nombres" class="form-control" placeholder="Nombre" required></div>
+      <div class="col-sm-4"><input type="text" name="parentesco" class="form-control" placeholder="Parentesco (opcional)"></div>
+      <div class="col-sm-3"><button type="submit" class="btn btn-verde w-100">Generar código</button></div>
+    </form>
+    <div id="resultado-invitacion" class="mt-2"></div>
+  </div>
+
+  <div class="tabla-wrapper">
+    <table class="tabla-datos">
+      <thead><tr><th>Nombre</th><th>Rol</th><th>Vinculado</th><th>Controla</th><th>Alertas</th><th></th></tr></thead>
+      <tbody>
+        {% for acceso in accesos_telegram %}
+        <tr>
+          <td>{{ acceso.nombres }}{% if acceso.parentesco %} <span class="text-muted">({{ acceso.parentesco }})</span>{% endif %}</td>
+          <td>{{ acceso.get_rol_display }}</td>
+          <td>{% if acceso.vinculado %}<i class="bi bi-check-circle-fill"></i>{% else %}<span class="text-muted">Pendiente</span>{% endif %}</td>
+          <td>{% if acceso.puede_controlar %}Sí{% else %}No{% endif %}</td>
+          <td>{% if acceso.recibe_alertas %}ON{% else %}OFF{% endif %}</td>
+          <td>
+            {% if acceso.rol == "FAMILIAR" %}
+            <form method="post" action="{% url 'monitoreo:acceso_telegram_permiso' acceso.pk %}" class="d-inline">
+              {% csrf_token %}<button type="submit" class="btn btn-sm btn-verde-contorno">{% if acceso.puede_controlar %}Quitar control{% else %}Permitir control{% endif %}</button>
+            </form>
+            <form method="post" action="{% url 'monitoreo:acceso_telegram_revocar' acceso.pk %}" class="d-inline">
+              {% csrf_token %}<button type="submit" class="btn btn-sm btn-verde-contorno">Revocar</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}<tr><td colspan="6" class="text-center text-muted">Todavía no hay accesos registrados.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  document.getElementById("form-invitar-telegram").addEventListener("submit", async function (evento) {
+    evento.preventDefault();
+    const datosFormulario = new FormData(evento.target);
+    const resultado = document.getElementById("resultado-invitacion");
+    resultado.innerHTML = "Generando…";
+    const resp = await fetch("{% url 'monitoreo:vehiculo_invitar_telegram' vehiculo.pk %}", {
+      method: "POST", headers: { "X-CSRFToken": window.obtenerCookie("csrftoken") }, body: datosFormulario,
+    });
+    const datos = await resp.json();
+    if (!datos.ok) { resultado.innerHTML = `<span class="text-danger">${datos.error}</span>`; return; }
+    resultado.innerHTML = `
+      <div class="tarjeta">
+        <p>Código para <strong>${datos.nombres}</strong>: <code>${datos.codigo}</code></p>
+        ${datos.enlace ? `<p><a href="${datos.enlace}" target="_blank">${datos.enlace}</a></p>` : ""}
+        ${datos.qr_base64 ? `<img src="data:image/png;base64,${datos.qr_base64}" style="width:160px;height:160px;">` : ""}
+        <p class="small text-muted">Compártelo por WhatsApp. También puede escribir <code>/unirse ${datos.codigo}</code> directamente al bot.</p>
+      </div>`;
+    evento.target.reset();
+  });
+</script>
+{% endblock %}

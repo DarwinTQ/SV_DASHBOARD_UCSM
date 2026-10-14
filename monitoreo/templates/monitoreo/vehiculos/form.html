@@ -1,0 +1,22 @@
+{% extends "monitoreo/base.html" %}
+{% block titulo %}{% if form.instance.pk %}Editar vehículo{% else %}Nuevo vehículo{% endif %}{% endblock %}
+{% block contenido %}
+<h1 class="h4 mb-3">{% if form.instance.pk %}Editar vehículo{% else %}Nuevo vehículo{% endif %}</h1>
+<div class="tarjeta" style="max-width:640px;">
+  <form method="post">
+    {% csrf_token %}
+    <div class="row">
+      <div class="col-md-6 mb-3"><label class="form-label">Conductor</label>{{ form.conductor }}{{ form.conductor.errors }}</div>
+      <div class="col-md-6 mb-3"><label class="form-label">Placa</label>{{ form.placa }}{{ form.placa.errors }}</div>
+      <div class="col-md-6 mb-3"><label class="form-label">Marca</label>{{ form.marca }}</div>
+      <div class="col-md-6 mb-3"><label class="form-label">Modelo</label>{{ form.modelo }}</div>
+      <div class="col-md-4 mb-3"><label class="form-label">Año</label>{{ form.anio }}{{ form.anio.errors }}</div>
+      <div class="col-md-4 mb-3"><label class="form-label">Color</label>{{ form.color }}</div>
+      <div class="col-md-4 mb-3"><label class="form-label">Tipo</label>{{ form.tipo }}</div>
+      <div class="col-12 mb-3 form-check">{{ form.activo }}<label class="form-check-label ms-2">Activo</label></div>
+    </div>
+    <button type="submit" class="btn btn-verde">Guardar</button>
+    <a href="{% url 'monitoreo:vehiculo_lista' %}" class="btn btn-link">Cancelar</a>
+  </form>
+</div>
+{% endblock %}

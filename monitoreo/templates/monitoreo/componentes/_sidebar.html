@@ -1,0 +1,50 @@
+{% load monitoreo_extras %}
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar__seccion">
+    <p class="sidebar__titulo-seccion">Monitoreo</p>
+    <a href="{% url 'monitoreo:panel' %}" class="sidebar__enlace {% enlace_activo 'monitoreo:panel' %}">
+      <i class="bi bi-speedometer2"></i> Panel en tiempo real
+    </a>
+    <a href="{% url 'monitoreo:incidencia_lista' %}" class="sidebar__enlace {% enlace_activo 'monitoreo:incidencia_lista' %}">
+      <i class="bi bi-exclamation-triangle"></i> Incidencias
+      {% if contador_sin_validar %}<span class="sidebar__contador">{{ contador_sin_validar }}</span>{% endif %}
+    </a>
+    <a href="{% url 'monitoreo:incidencia_mapa' %}" class="sidebar__enlace {% enlace_activo 'monitoreo:incidencia_mapa' %}">
+      <i class="bi bi-geo-alt"></i> Mapa de incidencias
+    </a>
+    <a href="{% url 'monitoreo:alerta_lista' %}" class="sidebar__enlace {% enlace_activo 'monitoreo:alerta_lista' %}">
+      <i class="bi bi-telegram"></i> Alertas Telegram
+    </a>
+  </div>
+
+  <div class="sidebar__seccion">
+    <p class="sidebar__titulo-seccion">Registro</p>
+    <a href="{% url 'monitoreo:conductor_lista' %}" class="sidebar__enlace {% enlace_activo 'monitoreo:conductor_lista' %}">
+      <i class="bi bi-person-badge"></i> Conductores
+    </a>
+    <a href="{% url 'monitoreo:vehiculo_lista' %}" class="sidebar__enlace {% enlace_activo 'monitoreo:vehiculo_lista' %}">
+      <i class="bi bi-car-front"></i> Vehículos
+    </a>
+    <a href="{% url 'monitoreo:dispositivo_lista' %}" class="sidebar__enlace {% enlace_activo 'monitoreo:dispositivo_lista' %}">
+      <i class="bi bi-cpu"></i> Dispositivos
+    </a>
+    <a href="{% url 'monitoreo:tipo_evento_lista' %}" class="sidebar__enlace {% enlace_activo 'monitoreo:tipo_evento_lista' %}">
+      <i class="bi bi-tags"></i> Tipos de evento
+    </a>
+  </div>
+
+  <div class="sidebar__seccion">
+    <p class="sidebar__titulo-seccion">Análisis</p>
+    <a href="{% url 'monitoreo:resultados' %}" class="sidebar__enlace {% enlace_activo 'monitoreo:resultados' %}">
+      <i class="bi bi-bar-chart-line"></i> Resultados y métricas
+    </a>
+  </div>
+
+  <div class="sidebar__seccion">
+    <p class="sidebar__titulo-seccion">Sistema</p>
+    <a href="{% url 'monitoreo:configuracion' %}" class="sidebar__enlace {% enlace_activo 'monitoreo:configuracion' %}">
+      <i class="bi bi-sliders"></i> Configuración
+    </a>
+    <a href="/admin/" class="sidebar__enlace"><i class="bi bi-shield-lock"></i> Administración</a>
+  </div>
+</nav>

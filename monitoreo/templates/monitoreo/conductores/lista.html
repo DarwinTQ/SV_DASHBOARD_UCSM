@@ -1,0 +1,39 @@
+{% extends "monitoreo/base.html" %}
+{% block titulo %}Conductores{% endblock %}
+{% block contenido %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h1 class="h4 mb-0">Conductores</h1>
+  <a href="{% url 'monitoreo:conductor_crear' %}" class="btn btn-verde"><i class="bi bi-plus-lg"></i> Nuevo conductor</a>
+</div>
+
+<div class="tarjeta">
+  <form method="get" class="row gx-2 mb-3">
+    <div class="col-md-4">
+      <input type="text" name="q" value="{{ busqueda }}" class="form-control" placeholder="Buscar por DNI, nombres o apellidos…">
+    </div>
+    <div class="col-md-2"><button type="submit" class="btn btn-verde-contorno w-100">Buscar</button></div>
+  </form>
+
+  <div class="tabla-wrapper">
+    <table class="tabla-datos">
+      <thead><tr><th>DNI</th><th>Nombres</th><th>Teléfono</th><th>Telegram</th><th></th></tr></thead>
+      <tbody>
+        {% for conductor in conductores %}
+        <tr>
+          <td>{{ conductor.dni }}</td>
+          <td>{{ conductor.nombre_completo }}</td>
+          <td>{{ conductor.telefono }}</td>
+          <td>{% if conductor.tiene_telegram %}<i class="bi bi-check-circle-fill"></i> Configurado{% else %}<span class="text-muted">Sin configurar</span>{% endif %}</td>
+          <td>
+            <a href="{% url 'monitoreo:conductor_detalle' conductor.pk %}" class="btn btn-sm btn-verde-contorno">Ver</a>
+            <a href="{% url 'monitoreo:conductor_editar' conductor.pk %}" class="btn btn-sm btn-verde-contorno">Editar</a>
+            <a href="{% url 'monitoreo:conductor_eliminar' conductor.pk %}" class="btn btn-sm btn-verde-contorno">Eliminar</a>
+          </td>
+        </tr>
+        {% empty %}<tr><td colspan="5" class="text-center text-muted">No hay conductores registrados.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "monitoreo/componentes/_paginacion.html" %}
+</div>
+{% endblock %}

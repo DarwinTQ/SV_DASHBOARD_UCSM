@@ -1,0 +1,14 @@
+{% extends "monitoreo/base.html" %}
+{% block titulo %}{{ tipo_evento.nombre }}{% endblock %}
+{% block contenido %}
+<h1 class="h4 mb-3">{{ tipo_evento.nombre }}</h1>
+<div class="tarjeta" style="max-width:560px;">
+  <table class="table table-sm mb-3">
+    <tr><th>Código</th><td>{{ tipo_evento.codigo }}</td></tr>
+    <tr><th>Riesgo</th><td>{% include "monitoreo/componentes/_badge_riesgo.html" with riesgo=tipo_evento.nivel_riesgo %}</td></tr>
+    <tr><th>Descripción</th><td>{{ tipo_evento.descripcion|default:"—" }}</td></tr>
+  </table>
+  <a href="{% url 'monitoreo:tipo_evento_editar' tipo_evento.pk %}" class="btn btn-verde-contorno">Editar</a>
+  <a href="{% url 'monitoreo:tipo_evento_lista' %}" class="btn btn-link">Volver</a>
+</div>
+{% endblock %}

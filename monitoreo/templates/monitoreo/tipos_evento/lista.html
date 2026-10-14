@@ -1,0 +1,30 @@
+{% extends "monitoreo/base.html" %}
+{% block titulo %}Tipos de evento{% endblock %}
+{% block contenido %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h1 class="h4 mb-0">Tipos de evento</h1>
+  <a href="{% url 'monitoreo:tipo_evento_crear' %}" class="btn btn-verde"><i class="bi bi-plus-lg"></i> Nuevo tipo</a>
+</div>
+<div class="tarjeta">
+  <div class="tabla-wrapper">
+    <table class="tabla-datos">
+      <thead><tr><th>Código</th><th>Nombre</th><th>Riesgo</th><th></th></tr></thead>
+      <tbody>
+        {% for tipo in tipos_evento %}
+        <tr>
+          <td>{{ tipo.codigo }}</td>
+          <td>{{ tipo.nombre }}</td>
+          <td>{% include "monitoreo/componentes/_badge_riesgo.html" with riesgo=tipo.nivel_riesgo %}</td>
+          <td>
+            <a href="{% url 'monitoreo:tipo_evento_detalle' tipo.pk %}" class="btn btn-sm btn-verde-contorno">Ver</a>
+            <a href="{% url 'monitoreo:tipo_evento_editar' tipo.pk %}" class="btn btn-sm btn-verde-contorno">Editar</a>
+            <a href="{% url 'monitoreo:tipo_evento_eliminar' tipo.pk %}" class="btn btn-sm btn-verde-contorno">Eliminar</a>
+          </td>
+        </tr>
+        {% empty %}<tr><td colspan="4" class="text-center text-muted">No hay tipos de evento registrados.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "monitoreo/componentes/_paginacion.html" %}
+</div>
+{% endblock %}

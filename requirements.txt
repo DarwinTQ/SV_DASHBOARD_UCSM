@@ -1,0 +1,13 @@
+Django>=4.2
+djangorestframework
+channels>=4
+daphne>=4
+whitenoise
+python-dotenv
+requests
+numpy
+opencv-python-headless
+pillow
+ultralytics
+openpyxl
+qrcode

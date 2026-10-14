@@ -1,0 +1,91 @@
+{% extends "monitoreo/base.html" %}
+{% load monitoreo_extras %}
+{% block titulo %}Incidencias{% endblock %}
+{% block contenido %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h1 class="h4 mb-0">Incidencias</h1>
+  <a href="?exportar=csv&{{ query_string }}" class="btn btn-verde-contorno"><i class="bi bi-filetype-csv"></i> Exportar CSV</a>
+</div>
+
+<div class="tarjeta">
+  <form method="get" class="row gy-2 gx-2 align-items-end">
+    <div class="col-md-2">
+      <label class="form-label">Desde</label>
+      <input type="date" name="desde" value="{{ filtros.desde|default:'' }}" class="form-control">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Hasta</label>
+      <input type="date" name="hasta" value="{{ filtros.hasta|default:'' }}" class="form-control">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Tipo</label>
+      <select name="tipo" class="form-select">
+        <option value="">Todos</option>
+        {% for tipo in tipos_evento %}
+        <option value="{{ tipo.codigo }}" {% if filtros.tipo == tipo.codigo %}selected{% endif %}>{{ tipo.nombre }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Riesgo</label>
+      <select name="riesgo" class="form-select">
+        <option value="">Todos</option>
+        <option value="ALTO" {% if filtros.riesgo == "ALTO" %}selected{% endif %}>Alto</option>
+        <option value="MEDIO" {% if filtros.riesgo == "MEDIO" %}selected{% endif %}>Medio</option>
+        <option value="BAJO" {% if filtros.riesgo == "BAJO" %}selected{% endif %}>Bajo</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Estado</label>
+      <select name="estado" class="form-select">
+        <option value="">Todos</option>
+        <option value="PENDIENTE" {% if filtros.estado == "PENDIENTE" %}selected{% endif %}>Pendiente</option>
+        <option value="NOTIFICADA" {% if filtros.estado == "NOTIFICADA" %}selected{% endif %}>Notificada</option>
+        <option value="ATENDIDA" {% if filtros.estado == "ATENDIDA" %}selected{% endif %}>Atendida</option>
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label">Placa</label>
+      <input type="text" name="placa" value="{{ filtros.placa|default:'' }}" class="form-control" placeholder="ABC-123">
+    </div>
+    <div class="col-12">
+      <button type="submit" class="btn btn-verde"><i class="bi bi-funnel"></i> Filtrar</button>
+      <a href="{% url 'monitoreo:incidencia_lista' %}" class="btn btn-link">Limpiar</a>
+    </div>
+  </form>
+</div>
+
+<div class="tarjeta">
+  <div class="tabla-wrapper">
+    <table class="tabla-datos">
+      <thead>
+        <tr>
+          <th></th><th>Fecha/hora</th><th>Tipo</th><th>Riesgo</th><th>Placa</th>
+          <th>Estado</th><th>Validación</th><th>Tiempo total</th><th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for incidencia in incidencias %}
+        <tr>
+          <td>
+            {% if incidencia.imagen_anotada %}<img src="{{ incidencia.imagen_anotada.url }}" class="tabla-miniatura">
+            {% elif incidencia.imagen %}<img src="{{ incidencia.imagen.url }}" class="tabla-miniatura">{% endif %}
+          </td>
+          <td>{{ incidencia.fecha_hora|date:"d/m/Y H:i:s" }}</td>
+          <td>{{ incidencia.tipo.nombre }}</td>
+          <td>{% include "monitoreo/componentes/_badge_riesgo.html" with riesgo=incidencia.tipo.nivel_riesgo %}</td>
+          <td>{{ incidencia.dispositivo.vehiculo.placa }}</td>
+          <td>{{ incidencia.get_estado_display }}</td>
+          <td>{{ incidencia.get_validacion_display|default:"Sin validar" }}</td>
+          <td>{{ incidencia.tiempos.tiempo_respuesta_total_ms|default:"—" }}</td>
+          <td><a href="{% url 'monitoreo:incidencia_detalle' incidencia.pk %}" class="btn btn-sm btn-verde-contorno">Ver</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="9" class="text-center text-muted">No hay incidencias con los filtros seleccionados.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "monitoreo/componentes/_paginacion.html" %}
+</div>
+{% endblock %}

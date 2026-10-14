@@ -1,0 +1,89 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}Sistema de Monitoreo Vehicular{% endblock %} · UCSM</title>
+  <link rel="icon" href="{% static 'monitoreo/img/favicon.png' %}">
+
+  <link rel="stylesheet" href="{% static 'vendor/bootstrap/css/bootstrap.min.css' %}">
+  <link rel="stylesheet" href="{% static 'vendor/bootstrap-icons/font/bootstrap-icons.min.css' %}">
+  <link rel="stylesheet" href="{% static 'vendor/leaflet/leaflet.css' %}">
+  <link rel="stylesheet" href="{% static 'monitoreo/css/app.css' %}">
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="topbar__marca">
+      <button class="btn btn-sm d-lg-none" type="button" id="boton-sidebar" aria-label="Abrir menú">
+        <i class="bi bi-list fs-4"></i>
+      </button>
+      <img src="{% static 'monitoreo/img/logo_ucsm_letra.png' %}" alt="UCSM" class="topbar__logo">
+      <div class="topbar__titulos d-none d-sm-flex">
+        <span class="titulo-principal">Sistema de Monitoreo Vehicular Inteligente</span>
+        <span class="subtitulo">YOLO + IoT · UCSM</span>
+      </div>
+    </div>
+
+    {% if user.is_authenticated %}
+    <div class="topbar__acciones">
+      <span class="indicador-conexion reconectando" id="indicador-conexion" aria-label="Estado de la conexión en tiempo real">
+        <span class="punto"></span> <span class="d-none d-md-inline" id="texto-conexion">Conectando…</span>
+      </span>
+      <span class="reloj-vivo d-none d-md-inline" id="reloj-vivo"></span>
+      <div class="dropdown">
+        <button class="btn btn-sm btn-verde-contorno dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-label="Menú de usuario">
+          <i class="bi bi-person-circle"></i> <span class="d-none d-md-inline">{{ user.username }}</span>
+        </button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li><a class="dropdown-item" href="/admin/"><i class="bi bi-gear"></i> Administración</a></li>
+          <li><hr class="dropdown-divider"></li>
+          <li>
+            <form method="post" action="{% url 'monitoreo:logout' %}">
+              {% csrf_token %}
+              <button type="submit" class="dropdown-item"><i class="bi bi-box-arrow-right"></i> Cerrar sesión</button>
+            </form>
+          </li>
+        </ul>
+      </div>
+    </div>
+    {% endif %}
+  </header>
+
+  {% if user.is_authenticated %}
+  <div class="cuerpo">
+    {% include "monitoreo/componentes/_sidebar.html" %}
+
+    <main class="contenido">
+      {% include "monitoreo/componentes/_toast.html" %}
+
+      {% if messages %}
+        {% for mensaje in messages %}
+          <div class="alert {% if mensaje.tags == 'error' %}alert-danger{% else %}alert-success{% endif %}" role="alert">
+            {{ mensaje }}
+          </div>
+        {% endfor %}
+      {% endif %}
+
+      {% block contenido %}{% endblock %}
+    </main>
+  </div>
+  {% else %}
+    {% block contenido_publico %}{% endblock %}
+  {% endif %}
+
+  <footer class="pie-pagina">Universidad Católica de Santa María — Tesis 2026</footer>
+</div>
+
+<script src="{% static 'vendor/bootstrap/js/bootstrap.bundle.min.js' %}"></script>
+<script src="{% static 'vendor/leaflet/leaflet.js' %}"></script>
+{% if user.is_authenticated %}
+<script src="{% static 'monitoreo/js/ws.js' %}"></script>
+<script src="{% static 'monitoreo/js/app.js' %}"></script>
+{% endif %}
+{% block extra_js %}{% endblock %}
+</body>
+</html>

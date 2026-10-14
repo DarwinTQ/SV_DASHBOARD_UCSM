@@ -1,0 +1,45 @@
+{% extends "monitoreo/base.html" %}
+{% block titulo %}Alertas Telegram{% endblock %}
+{% block contenido %}
+<h1 class="h4 mb-3">Alertas Telegram</h1>
+
+<div class="tarjeta">
+  <form method="get" class="row gx-2 mb-3">
+    <div class="col-md-3">
+      <select name="estado" class="form-select">
+        <option value="">Todos los estados</option>
+        <option value="ENVIADO" {% if estado_filtro == "ENVIADO" %}selected{% endif %}>Enviado</option>
+        <option value="FALLIDO" {% if estado_filtro == "FALLIDO" %}selected{% endif %}>Fallido</option>
+        <option value="PENDIENTE" {% if estado_filtro == "PENDIENTE" %}selected{% endif %}>Pendiente</option>
+      </select>
+    </div>
+    <div class="col-md-2"><button type="submit" class="btn btn-verde-contorno w-100">Filtrar</button></div>
+  </form>
+
+  <div class="tabla-wrapper">
+    <table class="tabla-datos">
+      <thead><tr><th>Incidencia</th><th>Destinatario</th><th>Estado</th><th>Código HTTP</th><th>Intentos</th><th>Error</th><th></th></tr></thead>
+      <tbody>
+        {% for alerta in alertas %}
+        <tr>
+          <td><a href="{% url 'monitoreo:incidencia_detalle' alerta.incidencia.pk %}">#{{ alerta.incidencia.pk }}</a></td>
+          <td>{{ alerta.destinatario_nombre }}</td>
+          <td><span class="badge-estado">{{ alerta.get_estado_envio_display }}</span></td>
+          <td>{{ alerta.codigo_http|default:"—" }}</td>
+          <td>{{ alerta.intentos }}</td>
+          <td class="small text-danger">{{ alerta.error|default:"" }}</td>
+          <td>
+            {% if alerta.estado_envio == "FALLIDO" %}
+            <form method="post" action="{% url 'monitoreo:alerta_reintentar' alerta.pk %}">
+              {% csrf_token %}<button type="submit" class="btn btn-sm btn-verde-contorno">Reintentar</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% empty %}<tr><td colspan="7" class="text-center text-muted">No se han generado alertas.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "monitoreo/componentes/_paginacion.html" %}
+</div>
+{% endblock %}

@@ -1,0 +1,109 @@
+{% extends "monitoreo/base.html" %}
+{% block titulo %}Configuración{% endblock %}
+{% block contenido %}
+<h1 class="h4 mb-3">Configuración</h1>
+
+<div class="row">
+  <div class="col-lg-7">
+    {% for grupo, valores in resumen.items %}
+    <div class="tarjeta">
+      <h2 class="tarjeta__titulo">{{ grupo }}</h2>
+      <table class="table table-sm mb-0">
+        {% for clave, valor in valores.items %}
+        <tr><th>{{ clave }}</th><td>{{ valor }}</td></tr>
+        {% endfor %}
+      </table>
+    </div>
+    {% endfor %}
+  </div>
+
+  <div class="col-lg-5">
+    <div class="tarjeta">
+      <h2 class="tarjeta__titulo"><i class="bi bi-robot"></i> Bot de Telegram</h2>
+      <table class="table table-sm mb-0">
+        <tr><th>Estado</th><td>{% if estado_bot.conectado %}<i class="bi bi-check-circle-fill"></i> Activo{% else %}<i class="bi bi-x-circle"></i> Inactivo{% endif %}</td></tr>
+        <tr><th>Usuario</th><td>{% if estado_bot.usuario_bot %}@{{ estado_bot.usuario_bot }}{% else %}—{% endif %}</td></tr>
+        <tr><th>Último update recibido</th><td>{{ estado_bot.ultimo_update|date:"d/m/Y H:i:s"|default:"—" }}</td></tr>
+        <tr><th>Comandos atendidos hoy</th><td>{{ estado_bot.comandos_hoy }}</td></tr>
+      </table>
+    </div>
+
+    <div class="tarjeta">
+      <h2 class="tarjeta__titulo"><i class="bi bi-telegram"></i> Probar Telegram</h2>
+      <div class="input-group mb-2">
+        <input type="text" id="campo-chat-id" class="form-control" placeholder="chat_id">
+        <button class="btn btn-verde" id="boton-probar-telegram">Enviar prueba</button>
+      </div>
+      <div id="resultado-telegram" class="small"></div>
+    </div>
+
+    <div class="tarjeta">
+      <h2 class="tarjeta__titulo"><i class="bi bi-camera"></i> Probar cámara</h2>
+      <div class="input-group mb-2">
+        <input type="text" id="campo-codigo-camara" class="form-control" placeholder="Código del dispositivo (ej. NODO-01)">
+        <button class="btn btn-verde" id="boton-probar-camara">Capturar</button>
+      </div>
+      <div id="resultado-camara"></div>
+    </div>
+
+    <div class="tarjeta">
+      <h2 class="tarjeta__titulo"><i class="bi bi-eye"></i> Probar YOLO</h2>
+      <form id="form-probar-yolo" class="mb-2">
+        <input type="file" id="campo-imagen-yolo" accept="image/*" class="form-control mb-2">
+        <button type="submit" class="btn btn-verde">Analizar imagen</button>
+      </form>
+      <div id="resultado-yolo"></div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  const csrftoken = window.obtenerCookie("csrftoken");
+
+  document.getElementById("boton-probar-telegram").addEventListener("click", async function () {
+    const chatId = document.getElementById("campo-chat-id").value;
+    const resultado = document.getElementById("resultado-telegram");
+    resultado.textContent = "Enviando…";
+    const resp = await fetch("{% url 'monitoreo:configuracion_probar_telegram' %}", {
+      method: "POST", headers: { "X-CSRFToken": csrftoken, "Content-Type": "application/x-www-form-urlencoded" },
+      body: "chat_id=" + encodeURIComponent(chatId),
+    });
+    const datos = await resp.json();
+    resultado.textContent = datos.ok ? "Mensaje enviado correctamente." : ("Error: " + (datos.error || "desconocido"));
+  });
+
+  document.getElementById("boton-probar-camara").addEventListener("click", async function () {
+    const codigo = document.getElementById("campo-codigo-camara").value;
+    const resultado = document.getElementById("resultado-camara");
+    resultado.textContent = "Capturando…";
+    const resp = await fetch("{% url 'monitoreo:configuracion_probar_camara' %}", {
+      method: "POST", headers: { "X-CSRFToken": csrftoken, "Content-Type": "application/x-www-form-urlencoded" },
+      body: "codigo=" + encodeURIComponent(codigo),
+    });
+    const datos = await resp.json();
+    resultado.innerHTML = datos.ok
+      ? `<img src="data:image/jpeg;base64,${datos.imagen_base64}" class="img-fluid rounded">`
+      : `<span class="text-danger">Error: ${datos.error}</span>`;
+  });
+
+  document.getElementById("form-probar-yolo").addEventListener("submit", async function (evento) {
+    evento.preventDefault();
+    const archivo = document.getElementById("campo-imagen-yolo").files[0];
+    const resultado = document.getElementById("resultado-yolo");
+    if (!archivo) return;
+    resultado.textContent = "Analizando…";
+    const formData = new FormData();
+    formData.append("imagen", archivo);
+    const resp = await fetch("{% url 'monitoreo:configuracion_probar_yolo' %}", {
+      method: "POST", headers: { "X-CSRFToken": csrftoken }, body: formData,
+    });
+    const datos = await resp.json();
+    if (!datos.ok) { resultado.innerHTML = `<span class="text-danger">${datos.error}</span>`; return; }
+    resultado.innerHTML = `
+      <p>Tiempo de inferencia: ${datos.tiempo_inferencia_ms} ms · Detecciones: ${datos.num_detecciones} · ¿Persona? ${datos.hay_persona ? "Sí" : "No"}</p>
+      ${datos.imagen_anotada_base64 ? `<img src="data:image/jpeg;base64,${datos.imagen_anotada_base64}" class="img-fluid rounded">` : ""}`;
+  });
+</script>
+{% endblock %}

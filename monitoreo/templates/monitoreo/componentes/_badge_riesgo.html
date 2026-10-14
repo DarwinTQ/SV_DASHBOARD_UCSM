@@ -1,0 +1,7 @@
+{% if riesgo == "ALTO" %}
+  <span class="badge-riesgo badge-riesgo--alto"><i class="bi bi-exclamation-octagon-fill"></i> Alto</span>
+{% elif riesgo == "MEDIO" %}
+  <span class="badge-riesgo badge-riesgo--medio">Medio</span>
+{% else %}
+  <span class="badge-riesgo badge-riesgo--bajo">Bajo</span>
+{% endif %}

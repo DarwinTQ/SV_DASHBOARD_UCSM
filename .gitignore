@@ -1,0 +1,24 @@
+# Entorno y secretos
+.venv/
+.env
+
+# Python
+__pycache__/
+*.pyc
+
+# Django
+db.sqlite3
+db.sqlite3-wal
+db.sqlite3-shm
+staticfiles/
+media/
+!media/simulacion/.gitkeep
+
+# Logs
+logs/*.log*
+
+# Modelos YOLO (pesos pesados; se descargan solos si faltan)
+modelos_ia/*.pt
+
+# Exportaciones generadas
+resultados_monitoreo_ucsm.xlsx

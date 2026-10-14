@@ -1,0 +1,83 @@
+{% extends "monitoreo/base.html" %}
+{% load static %}
+{% block titulo %}{{ dispositivo.codigo }}{% endblock %}
+{% block contenido %}
+<h1 class="h4 mb-3">
+  {{ dispositivo.codigo }}
+  {% if en_linea %}<span class="badge-estado">En línea</span>{% else %}<span class="badge-estado dispositivo-offline"><i class="bi bi-wifi-off"></i> Fuera de línea</span>{% endif %}
+</h1>
+
+<div class="row">
+  <div class="col-lg-6">
+    <div class="tarjeta">
+      <h2 class="tarjeta__titulo"><i class="bi bi-cpu"></i> Datos del dispositivo</h2>
+      <table class="table table-sm mb-3">
+        <tr><th>Vehículo</th><td>{{ dispositivo.vehiculo }}</td></tr>
+        <tr><th>Estado (armado)</th><td>{{ dispositivo.get_estado_display }}</td></tr>
+        <tr><th>IP</th><td>{{ dispositivo.ip|default:"—" }}</td></tr>
+        <tr><th>MAC ESP32</th><td>{{ dispositivo.mac_esp32|default:"—" }}</td></tr>
+        <tr><th>MAC ESP32-CAM</th><td>{{ dispositivo.mac_esp32cam|default:"—" }}</td></tr>
+        <tr><th>Firmware</th><td>{{ dispositivo.version_firmware|default:"—" }}</td></tr>
+        <tr><th>Último contacto</th><td>{{ dispositivo.ultimo_contacto|date:"d/m/Y H:i:s"|default:"Sin contacto" }}</td></tr>
+        <tr><th>Disponibilidad</th><td>{% if disponibilidad_pct is not None %}{{ disponibilidad_pct }}%{% else %}—{% endif %}</td></tr>
+        <tr><th>URL de la cámara</th><td>{{ url_camara|default:"No configurada" }}</td></tr>
+      </table>
+
+      <form method="post" action="{% url 'monitoreo:dispositivo_armar' dispositivo.pk %}" class="d-inline">
+        {% csrf_token %}
+        <input type="hidden" name="armado" value="{% if dispositivo.armado %}0{% else %}1{% endif %}">
+        <button type="submit" class="btn btn-verde-contorno">{% if dispositivo.armado %}Desarmar{% else %}Armar{% endif %}</button>
+      </form>
+      <button type="button" class="btn btn-verde-contorno" id="boton-probar-camara" data-id="{{ dispositivo.pk }}">Probar cámara</button>
+      <a href="{% url 'monitoreo:dispositivo_editar' dispositivo.pk %}" class="btn btn-link">Editar</a>
+
+      <div id="resultado-prueba-camara" class="mt-3"></div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="tarjeta">
+      <h2 class="tarjeta__titulo"><i class="bi bi-graph-up"></i> Historial RSSI / Voltaje</h2>
+      <canvas id="grafica-historial-dispositivo" height="200"></canvas>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'vendor/chartjs/chart.umd.min.js' %}"></script>
+<script>
+  const historial = [
+    {% for estado in historial_estados %}
+    { fecha: "{{ estado.fecha_hora|date:'d/m H:i' }}", rssi: {{ estado.rssi_wifi_dbm|default:"null" }}, voltaje: {{ estado.voltaje_v|default:"null" }} },
+    {% endfor %}
+  ].reverse();
+
+  new Chart(document.getElementById("grafica-historial-dispositivo"), {
+    type: "line",
+    data: {
+      labels: historial.map((h) => h.fecha),
+      datasets: [
+        { label: "RSSI (dBm)", data: historial.map((h) => h.rssi), borderColor: "#0cb967", tension: .3 },
+        { label: "Voltaje (V)", data: historial.map((h) => h.voltaje), borderColor: "#07854a", borderDash: [6, 4], tension: .3, yAxisID: "y2" },
+      ],
+    },
+    options: { scales: { y2: { position: "right" } } },
+  });
+
+  document.getElementById("boton-probar-camara").addEventListener("click", async function () {
+    const resultado = document.getElementById("resultado-prueba-camara");
+    resultado.innerHTML = "Capturando…";
+    try {
+      const resp = await fetch("{% url 'monitoreo:dispositivo_probar_camara' dispositivo.pk %}", {
+        method: "POST", headers: { "X-CSRFToken": window.obtenerCookie("csrftoken") },
+      });
+      const datos = await resp.json();
+      if (!datos.ok) throw new Error(datos.error);
+      resultado.innerHTML = `<img src="data:image/jpeg;base64,${datos.imagen_base64}" class="img-fluid rounded" style="max-width:320px;"><p class="small text-muted">Captura en ${datos.captura_ms} ms</p>`;
+    } catch (error) {
+      resultado.innerHTML = `<p class="text-danger">No se pudo capturar: ${error.message}</p>`;
+    }
+  });
+</script>
+{% endblock %}

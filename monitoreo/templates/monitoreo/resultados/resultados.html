@@ -1,0 +1,166 @@
+{% extends "monitoreo/base.html" %}
+{% load static monitoreo_extras %}
+{% block titulo %}Resultados y métricas{% endblock %}
+{% block contenido %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h1 class="h4 mb-0">Resultados y métricas</h1>
+  <a href="{% url 'monitoreo:resultados_exportar_excel' %}?desde={{ filtros.desde|default:'' }}&hasta={{ filtros.hasta|default:'' }}&dispositivo={{ filtros.dispositivo_id|default:'' }}&tipo={{ filtros.tipo|default:'' }}"
+     class="btn btn-verde"><i class="bi bi-file-earmark-excel"></i> Exportar Excel para la tesis</a>
+</div>
+
+<div class="tarjeta">
+  <form method="get" class="row gy-2 gx-2 align-items-end">
+    <div class="col-md-3"><label class="form-label">Desde</label><input type="date" name="desde" value="{{ filtros.desde|default:'' }}" class="form-control"></div>
+    <div class="col-md-3"><label class="form-label">Hasta</label><input type="date" name="hasta" value="{{ filtros.hasta|default:'' }}" class="form-control"></div>
+    <div class="col-md-3">
+      <label class="form-label">Dispositivo</label>
+      <select name="dispositivo" class="form-select">
+        <option value="">Todos</option>
+        {% for d in dispositivos %}<option value="{{ d.pk }}" {% if filtros.dispositivo_id == d.pk|stringformat:"s" %}selected{% endif %}>{{ d.codigo }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3"><button type="submit" class="btn btn-verde-contorno w-100">Filtrar</button></div>
+  </form>
+</div>
+
+<div class="tarjeta">
+  <h2 class="tarjeta__titulo"><i class="bi bi-stopwatch"></i> Estadísticas de tiempos (ms)</h2>
+  <div class="tabla-wrapper">
+    <table class="tabla-datos">
+      <thead><tr><th>Etapa</th><th>n</th><th>Media</th><th>Desv. estándar</th><th>Mín</th><th>Máx</th><th>P50</th><th>P95</th></tr></thead>
+      <tbody>
+        {% for etiqueta, est in filas_tiempos %}
+        <tr>
+          <td>{{ etiqueta }}</td>
+          <td>{{ est.n }}</td>
+          <td>{{ est.media|default:"—" }}</td>
+          <td>{{ est.desviacion|default:"—" }}</td>
+          <td>{{ est.minimo|default:"—" }}</td>
+          <td>{{ est.maximo|default:"—" }}</td>
+          <td>{{ est.p50|default:"—" }}</td>
+          <td>{{ est.p95|default:"—" }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-lg-6">
+    <div class="tarjeta">
+      <h2 class="tarjeta__titulo"><i class="bi bi-grid-3x3"></i> Matriz de confusión</h2>
+      <table class="table table-sm">
+        <tr><th></th><th>Predicho positivo</th><th>Predicho negativo</th></tr>
+        <tr><th>Real positivo</th><td>{{ resultados.matriz_confusion.conteo.VP }} (VP)</td><td>{{ resultados.matriz_confusion.conteo.FN }} (FN)</td></tr>
+        <tr><th>Real negativo</th><td>{{ resultados.matriz_confusion.conteo.FP }} (FP)</td><td>{{ resultados.matriz_confusion.conteo.VN }} (VN)</td></tr>
+      </table>
+      <table class="table table-sm mb-0">
+        <tr><th>Precisión</th><td>{{ resultados.matriz_confusion.precision|default:"—" }}</td></tr>
+        <tr><th>Exhaustividad (Recall)</th><td>{{ resultados.matriz_confusion.exhaustividad|default:"—" }}</td></tr>
+        <tr><th>F1</th><td>{{ resultados.matriz_confusion.f1|default:"—" }}</td></tr>
+        <tr><th>Exactitud</th><td>{{ resultados.matriz_confusion.exactitud|default:"—" }}</td></tr>
+        <tr><th>Incidencias sin validar</th><td>{{ resultados.matriz_confusion.sin_validar }}</td></tr>
+      </table>
+    </div>
+
+    <div class="tarjeta">
+      <h2 class="tarjeta__titulo"><i class="bi bi-wifi"></i> Disponibilidad y alertas</h2>
+      <table class="table table-sm mb-0">
+        <tr><th>Disponibilidad</th><td>{% if resultados.disponibilidad.disponibilidad_pct is not None %}{{ resultados.disponibilidad.disponibilidad_pct }}%{% else %}—{% endif %} ({{ resultados.disponibilidad.muestras_en_linea }}/{{ resultados.disponibilidad.total_muestras }} muestras)</td></tr>
+        <tr><th>Alertas enviadas</th><td>{{ resultados.alertas.enviadas }} / {{ resultados.alertas.total }}</td></tr>
+        <tr><th>Alertas fallidas</th><td>{{ resultados.alertas.fallidas }}</td></tr>
+        <tr><th>Tasa de éxito</th><td>{% if resultados.alertas.tasa_exito is not None %}{{ resultados.alertas.tasa_exito }}%{% else %}—{% endif %}</td></tr>
+        <tr><th>Intentos promedio</th><td>{{ resultados.alertas.intentos_promedio|default:"—" }}</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="tarjeta">
+      <h2 class="tarjeta__titulo"><i class="bi bi-pie-chart"></i> Incidencias por tipo</h2>
+      <canvas id="grafica-por-tipo" height="200"></canvas>
+    </div>
+    <div class="tarjeta">
+      <h2 class="tarjeta__titulo"><i class="bi bi-bar-chart"></i> Incidencias por hora del día</h2>
+      <canvas id="grafica-por-hora" height="200"></canvas>
+    </div>
+  </div>
+</div>
+
+<div class="row">
+  <div class="col-lg-6">
+    <div class="tarjeta">
+      <h2 class="tarjeta__titulo"><i class="bi bi-robot"></i> Consultas por Telegram</h2>
+      {% if consultas_bot %}
+      <div class="tabla-wrapper">
+        <table class="tabla-datos">
+          <thead><tr><th>Comando</th><th>n</th><th>Prom. (ms)</th><th>P95 (ms)</th><th>Éxito</th></tr></thead>
+          <tbody>
+            {% for fila in consultas_bot %}
+            <tr>
+              <td>/{{ fila.comando }}</td><td>{{ fila.n }}</td>
+              <td>{{ fila.promedio_ms|default:"—" }}</td><td>{{ fila.p95_ms|default:"—" }}</td>
+              <td>{% if fila.tasa_exito is not None %}{{ fila.tasa_exito }}%{% else %}—{% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}<p class="text-muted mb-0">Todavía no hay comandos registrados del bot.</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="tarjeta">
+      <h2 class="tarjeta__titulo"><i class="bi bi-send-check"></i> Entrega de alertas</h2>
+      <table class="table table-sm mb-2">
+        <tr><th>Entregadas</th><td>{{ entrega_alertas.entregadas }} / {{ entrega_alertas.total }}
+          {% if entrega_alertas.pct_entregadas is not None %}({{ entrega_alertas.pct_entregadas }}%){% endif %}</td></tr>
+        <tr><th>Latencia promedio</th><td>{{ entrega_alertas.latencia_promedio_ms|default:"—" }} ms</td></tr>
+      </table>
+      {% if entrega_alertas.detalle %}
+      <div class="tabla-wrapper" style="max-height:260px;overflow-y:auto;">
+        <table class="tabla-datos">
+          <thead><tr><th>Incidencia</th><th>Destinatario</th><th>Estado</th><th>Latencia</th></tr></thead>
+          <tbody>
+            {% for fila in entrega_alertas.detalle %}
+            <tr>
+              <td><a href="{% url 'monitoreo:incidencia_detalle' fila.incidencia_id %}">#{{ fila.incidencia_id }}</a></td>
+              <td>{{ fila.destinatario }}</td>
+              <td><span class="badge-estado">{{ fila.estado }}</span></td>
+              <td>{% if fila.latencia_ms is not None %}{{ fila.latencia_ms }} ms{% else %}—{% endif %}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'vendor/chartjs/chart.umd.min.js' %}"></script>
+<script>
+  const porTipo = {{ resultados.por_tipo|to_json }};
+  new Chart(document.getElementById("grafica-por-tipo"), {
+    type: "pie",
+    data: {
+      labels: porTipo.map((f) => f.tipo__nombre),
+      datasets: [{ data: porTipo.map((f) => f.total), backgroundColor: ["#0cb967", "#07854a", "rgba(12,185,103,.4)", "rgba(12,185,103,.2)", "#0a3d24"] }],
+    },
+  });
+
+  const porHora = {{ resultados.por_hora|to_json }};
+  new Chart(document.getElementById("grafica-por-hora"), {
+    type: "bar",
+    data: {
+      labels: porHora.map((f) => f.hora + ":00"),
+      datasets: [{ label: "Incidencias", data: porHora.map((f) => f.total), backgroundColor: "#0cb967" }],
+    },
+    options: { scales: { y: { beginAtZero: true } } },
+  });
+</script>
+{% endblock %}

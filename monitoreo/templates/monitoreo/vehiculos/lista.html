@@ -1,0 +1,38 @@
+{% extends "monitoreo/base.html" %}
+{% block titulo %}Vehículos{% endblock %}
+{% block contenido %}
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <h1 class="h4 mb-0">Vehículos</h1>
+  <a href="{% url 'monitoreo:vehiculo_crear' %}" class="btn btn-verde"><i class="bi bi-plus-lg"></i> Nuevo vehículo</a>
+</div>
+
+<div class="tarjeta">
+  <form method="get" class="row gx-2 mb-3">
+    <div class="col-md-4"><input type="text" name="q" value="{{ busqueda }}" class="form-control" placeholder="Buscar por placa, marca o modelo…"></div>
+    <div class="col-md-2"><button type="submit" class="btn btn-verde-contorno w-100">Buscar</button></div>
+  </form>
+
+  <div class="tabla-wrapper">
+    <table class="tabla-datos">
+      <thead><tr><th>Placa</th><th>Marca/Modelo</th><th>Color</th><th>Conductor</th><th>Activo</th><th></th></tr></thead>
+      <tbody>
+        {% for vehiculo in vehiculos %}
+        <tr>
+          <td>{{ vehiculo.placa }}</td>
+          <td>{{ vehiculo.marca }} {{ vehiculo.modelo }} ({{ vehiculo.anio }})</td>
+          <td>{{ vehiculo.color }}</td>
+          <td><a href="{% url 'monitoreo:conductor_detalle' vehiculo.conductor.pk %}">{{ vehiculo.conductor.nombre_completo }}</a></td>
+          <td>{% if vehiculo.activo %}<i class="bi bi-check-circle-fill"></i>{% else %}<i class="bi bi-dash-circle"></i>{% endif %}</td>
+          <td>
+            <a href="{% url 'monitoreo:vehiculo_detalle' vehiculo.pk %}" class="btn btn-sm btn-verde-contorno">Ver</a>
+            <a href="{% url 'monitoreo:vehiculo_editar' vehiculo.pk %}" class="btn btn-sm btn-verde-contorno">Editar</a>
+            <a href="{% url 'monitoreo:vehiculo_eliminar' vehiculo.pk %}" class="btn btn-sm btn-verde-contorno">Eliminar</a>
+          </td>
+        </tr>
+        {% empty %}<tr><td colspan="6" class="text-center text-muted">No hay vehículos registrados.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% include "monitoreo/componentes/_paginacion.html" %}
+</div>
+{% endblock %}

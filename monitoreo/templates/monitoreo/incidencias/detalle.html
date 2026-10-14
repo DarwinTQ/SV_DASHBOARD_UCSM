@@ -1,0 +1,148 @@
+{% extends "monitoreo/base.html" %}
+{% load static monitoreo_extras %}
+{% block titulo %}Incidencia #{{ incidencia.pk }}{% endblock %}
+{% block contenido %}
+<h1 class="h4 mb-3">
+  Incidencia #{{ incidencia.pk }} · {{ incidencia.tipo.nombre }}
+  {% include "monitoreo/componentes/_badge_riesgo.html" with riesgo=incidencia.tipo.nivel_riesgo %}
+</h1>
+
+<div class="row">
+  <div class="col-lg-7">
+    <div class="tarjeta">
+      <h2 class="tarjeta__titulo"><i class="bi bi-image"></i> Imagen capturada</h2>
+      <ul class="nav nav-tabs mb-2">
+        <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-anotada">Anotada (YOLO)</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-original">Original</button></li>
+      </ul>
+      <div class="tab-content">
+        <div class="tab-pane show active" id="tab-anotada">
+          {% if incidencia.imagen_anotada %}
+            <a href="{{ incidencia.imagen_anotada.url }}" target="_blank"><img src="{{ incidencia.imagen_anotada.url }}" class="img-fluid rounded"></a>
+          {% else %}<p class="text-muted">Sin imagen anotada (YOLO no detectó clases o no se pudo procesar).</p>{% endif %}
+        </div>
+        <div class="tab-pane" id="tab-original">
+          {% if incidencia.imagen %}
+            <a href="{{ incidencia.imagen.url }}" target="_blank"><img src="{{ incidencia.imagen.url }}" class="img-fluid rounded"></a>
+          {% else %}<p class="text-muted">No se pudo capturar imagen de la cámara en el momento del evento.</p>{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div class="tarjeta">
+      <h2 class="tarjeta__titulo"><i class="bi bi-bounding-box"></i> Detecciones YOLO</h2>
+      {% if detecciones %}
+      <div class="tabla-wrapper">
+        <table class="tabla-datos">
+          <thead><tr><th>Clase</th><th>Confianza</th><th>Caja (x1,y1,x2,y2)</th><th>Modelo</th></tr></thead>
+          <tbody>
+            {% for d in detecciones %}
+            <tr><td>{{ d.clase }}</td><td>{{ d.confianza|floatformat:2 }}</td><td>{{ d.x1 }}, {{ d.y1 }}, {{ d.x2 }}, {{ d.y2 }}</td><td>{{ d.modelo_yolo }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}<p class="text-muted mb-0">Sin detecciones registradas.</p>{% endif %}
+    </div>
+
+    <div class="tarjeta">
+      <h2 class="tarjeta__titulo"><i class="bi bi-hourglass-split"></i> Línea de tiempo</h2>
+      {% if medicion %}
+      <div class="linea-tiempo-etapas mb-2">
+        {% if medicion.latencia_red_ms %}<div class="linea-tiempo-etapas__segmento" style="flex:{{ medicion.latencia_red_ms }}">Red</div>{% endif %}
+        {% if medicion.tiempo_captura_ms %}<div class="linea-tiempo-etapas__segmento" style="flex:{{ medicion.tiempo_captura_ms }}">Captura</div>{% endif %}
+        {% if medicion.tiempo_inferencia_ms %}<div class="linea-tiempo-etapas__segmento" style="flex:{{ medicion.tiempo_inferencia_ms }}">YOLO</div>{% endif %}
+        {% if medicion.tiempo_bd_ms %}<div class="linea-tiempo-etapas__segmento" style="flex:{{ medicion.tiempo_bd_ms }}">BD</div>{% endif %}
+        {% if medicion.latencia_telegram_ms %}<div class="linea-tiempo-etapas__segmento" style="flex:{{ medicion.latencia_telegram_ms }}">Telegram</div>{% endif %}
+      </div>
+      <table class="table table-sm">
+        <tr><th>Latencia de red</th><td>{{ medicion.latencia_red_ms|default:"—" }} ms</td></tr>
+        <tr><th>Tiempo de captura</th><td>{{ medicion.tiempo_captura_ms|default:"—" }} ms</td></tr>
+        <tr><th>Tiempo de inferencia (YOLO)</th><td>{{ medicion.tiempo_inferencia_ms|default:"—" }} ms</td></tr>
+        <tr><th>Tiempo de registro en BD</th><td>{{ medicion.tiempo_bd_ms|default:"—" }} ms</td></tr>
+        <tr><th>Latencia de Telegram</th><td>{{ medicion.latencia_telegram_ms|default:"—" }} ms</td></tr>
+        <tr><th><strong>Tiempo de respuesta total</strong></th><td><strong>{{ medicion.tiempo_respuesta_total_ms|default:"—" }} ms</strong></td></tr>
+        <tr><th>FPS equivalente</th><td>{{ medicion.fps|default:"—" }}</td></tr>
+      </table>
+      {% else %}<p class="text-muted mb-0">Sin mediciones de tiempo registradas.</p>{% endif %}
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="tarjeta">
+      <h2 class="tarjeta__titulo"><i class="bi bi-info-circle"></i> Datos del sensor</h2>
+      <table class="table table-sm mb-0">
+        <tr><th>Dispositivo</th><td>{{ incidencia.dispositivo.codigo }}</td></tr>
+        <tr><th>Vehículo</th><td>{{ incidencia.dispositivo.vehiculo }}</td></tr>
+        <tr><th>Conductor</th><td>{{ incidencia.dispositivo.vehiculo.conductor.nombre_completo }}</td></tr>
+        <tr><th>Fecha/hora</th><td>{{ incidencia.fecha_hora|date:"d/m/Y H:i:s" }}</td></tr>
+        <tr><th>Aceleración</th><td>{{ incidencia.aceleracion_g|default:"—" }} g</td></tr>
+        <tr><th>Nivel de audio</th><td>{{ incidencia.nivel_audio_db|default:"—" }} dB</td></tr>
+        <tr><th>Observación</th><td>{{ incidencia.observacion|default:"—" }}</td></tr>
+      </table>
+    </div>
+
+    {% if incidencia.tiene_coordenadas %}
+    <div class="tarjeta">
+      <h2 class="tarjeta__titulo"><i class="bi bi-geo-alt"></i> Ubicación</h2>
+      <div id="mapa-incidencia" style="height:220px;border-radius:10px;"></div>
+      <a href="{{ incidencia.link_mapa }}" target="_blank" class="btn btn-verde-contorno mt-2"><i class="bi bi-map"></i> Abrir en Google Maps</a>
+    </div>
+    {% endif %}
+
+    <div class="tarjeta">
+      <h2 class="tarjeta__titulo"><i class="bi bi-telegram"></i> Alertas enviadas</h2>
+      {% for alerta in alertas %}
+      <div class="border-bottom py-2 d-flex justify-content-between align-items-start">
+        <div>
+          <span class="badge-estado">{{ alerta.get_estado_envio_display }}</span>
+          <strong class="ms-1">{{ alerta.destinatario_nombre }}</strong>
+          <div class="small text-muted">{{ alerta.fecha_envio|date:"d/m/Y H:i:s"|default:"Sin enviar" }} · {{ alerta.intentos }} intento(s)</div>
+          {% if alerta.error %}<div class="small text-danger">{{ alerta.error }}</div>{% endif %}
+        </div>
+        {% if alerta.estado_envio == "FALLIDO" %}
+        <form method="post" action="{% url 'monitoreo:alerta_reintentar' alerta.pk %}">
+          {% csrf_token %}
+          <input type="hidden" name="siguiente" value="incidencia">
+          <button type="submit" class="btn btn-sm btn-verde-contorno">Reintentar</button>
+        </form>
+        {% endif %}
+      </div>
+      {% empty %}<p class="text-muted mb-0">No se generaron alertas para esta incidencia.</p>{% endfor %}
+    </div>
+
+    <div class="tarjeta">
+      <h2 class="tarjeta__titulo"><i class="bi bi-check2-square"></i> Validar incidencia</h2>
+      <form method="post">
+        {% csrf_token %}
+        <div class="mb-2">
+          <label class="form-label">Estado</label>
+          {{ formulario.estado }}
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Validación</label>
+          {{ formulario.validacion }}
+        </div>
+        <div class="mb-2">
+          <label class="form-label">Observación</label>
+          {{ formulario.observacion }}
+        </div>
+        <button type="submit" class="btn btn-verde w-100">Guardar</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'monitoreo/js/mapa.js' %}"></script>
+{% if incidencia.tiene_coordenadas %}
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const mapa = new MapaVehicular({ elementoId: "mapa-incidencia" });
+    mapa.agregarMarcador({{ incidencia.latitud }}, {{ incidencia.longitud }}, "{{ incidencia.tipo.nombre }}");
+    mapa.centrar({{ incidencia.latitud }}, {{ incidencia.longitud }});
+  });
+</script>
+{% endif %}
+{% endblock %}

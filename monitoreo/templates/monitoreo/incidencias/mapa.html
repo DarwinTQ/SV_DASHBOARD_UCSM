@@ -1,0 +1,55 @@
+{% extends "monitoreo/base.html" %}
+{% load static %}
+{% block titulo %}Mapa de incidencias{% endblock %}
+{% block contenido %}
+<h1 class="h4 mb-3">Mapa de incidencias</h1>
+
+<div class="tarjeta">
+  <form method="get" class="row gy-2 gx-2 align-items-end" id="form-filtros-mapa">
+    <div class="col-md-3">
+      <label class="form-label">Desde</label>
+      <input type="date" name="desde" class="form-control" id="filtro-desde">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Hasta</label>
+      <input type="date" name="hasta" class="form-control" id="filtro-hasta">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label">Tipo</label>
+      <select name="tipo" class="form-select" id="filtro-tipo">
+        <option value="">Todos</option>
+        {% for tipo in tipos_evento %}<option value="{{ tipo.codigo }}">{{ tipo.nombre }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <button type="button" class="btn btn-verde w-100" id="boton-filtrar-mapa"><i class="bi bi-funnel"></i> Filtrar</button>
+    </div>
+  </form>
+</div>
+
+<div class="tarjeta">
+  <div id="mapa-incidencias" style="height: 60vh; border-radius: 10px;"></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'monitoreo/js/mapa.js' %}"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const mapa = new MapaVehicular({ elementoId: "mapa-incidencias" });
+
+    async function cargar() {
+      const parametros = new URLSearchParams(new FormData(document.getElementById("form-filtros-mapa")));
+      const resp = await fetch("{% url 'api_panel_incidencias_recientes' %}?" + parametros.toString(), { credentials: "same-origin" });
+      const datos = await resp.json();
+      mapa.limpiarMarcadores();
+      (datos.incidencias || []).forEach((inc) => {
+        if (inc.lat != null) mapa.agregarMarcador(inc.lat, inc.lon, `${inc.nombre_tipo} · ${inc.placa}`);
+      });
+    }
+
+    document.getElementById("boton-filtrar-mapa").addEventListener("click", cargar);
+    cargar();
+  });
+</script>
+{% endblock %}
