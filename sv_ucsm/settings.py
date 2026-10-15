@@ -33,7 +33,6 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     "monitoreo.security.middleware.MarcaTiempoRecepcionMiddleware",
     "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -41,6 +40,12 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+# WhiteNoise solo en producción: en desarrollo serviría la copia ya recolectada
+# en staticfiles/ (su middleware corre antes del handler de staticfiles de
+# Django) y mostraría CSS/JS desactualizado hasta volver a hacer collectstatic.
+if not DEBUG:
+    MIDDLEWARE.insert(2, "whitenoise.middleware.WhiteNoiseMiddleware")
 
 ROOT_URLCONF = "sv_ucsm.urls"
 

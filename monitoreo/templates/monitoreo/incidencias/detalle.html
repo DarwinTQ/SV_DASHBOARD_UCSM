@@ -138,8 +138,13 @@
 <script src="{% static 'monitoreo/js/mapa.js' %}"></script>
 {% if incidencia.tiene_coordenadas %}
 <script>
-  document.addEventListener("DOMContentLoaded", function () {
-    const mapa = new MapaVehicular({ elementoId: "mapa-incidencia" });
+  document.addEventListener("DOMContentLoaded", async function () {
+    const mapa = await MapaVehicular.crear({
+      elementoId: "mapa-incidencia",
+      zoom: {{ mapa_zoom }},
+      apiKey: "{{ google_maps_api_key|escapejs }}",
+    });
+    if (!mapa) return;
     mapa.agregarMarcador({{ incidencia.latitud }}, {{ incidencia.longitud }}, "{{ incidencia.tipo.nombre }}");
     mapa.centrar({{ incidencia.latitud }}, {{ incidencia.longitud }});
   });

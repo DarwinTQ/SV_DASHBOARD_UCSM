@@ -4,18 +4,21 @@
  * incidencias conforme llegan los mensajes (sección 10).
  */
 class PanelTiempoReal {
-  constructor({ urlWebSocket, urlEstado, googleMapsApiKey }) {
+  constructor({ urlWebSocket, urlEstado, googleMapsApiKey, mapaZoom = 16 }) {
     this.urlWebSocket = urlWebSocket;
     this.urlEstado = urlEstado;
     this.googleMapsApiKey = googleMapsApiKey;
+    this.mapaZoom = mapaZoom;
     this._grafica = null;
     this._mapa = null;
+    this._ultimaPosicion = null;
+    this._marcadoresPendientes = [];
     this._notificacionesPermitidas = "Notification" in window && Notification.permission === "granted";
   }
 
   iniciar() {
     this._inicializarGrafica();
-    this._mapa = new MapaVehicular({ elementoId: "mapa-panel" });
+    this._inicializarMapa();
 
     this._conexion = new ConexionTiempoReal({
       url: this.urlWebSocket,
@@ -24,6 +27,34 @@ class PanelTiempoReal {
       onMensaje: (mensaje) => this._procesarMensaje(mensaje),
     });
     this._conexion.iniciar();
+  }
+
+  /**
+   * El mapa del dashboard es exclusivamente Google Maps, con la clave que viene
+   * de .env (GOOGLE_MAPS_API_KEY). Se carga de forma asíncrona para no demorar
+   * el WebSocket; mientras tanto se guardan la posición y los marcadores que
+   * lleguen, y se aplican en cuanto el mapa está listo.
+   */
+  async _inicializarMapa() {
+    const disponible = await MapaVehicular.cargarGoogleMaps(this.googleMapsApiKey);
+    if (!disponible) {
+      MapaVehicular.mostrarAviso(
+        "mapa-panel",
+        this.googleMapsApiKey
+          ? "No se pudo cargar Google Maps (revisa la conexión a internet)."
+          : "Configura GOOGLE_MAPS_API_KEY en .env para ver el mapa."
+      );
+      return;
+    }
+
+    this._mapa = new MapaVehicular({
+      elementoId: "mapa-panel", zoom: this.mapaZoom, forzarGoogle: true,
+    });
+    this._marcadoresPendientes.forEach((m) => this._mapa.agregarMarcador(m.lat, m.lon, m.etiqueta));
+    this._marcadoresPendientes = [];
+    if (this._ultimaPosicion) {
+      this._mapa.centrar(this._ultimaPosicion.lat, this._ultimaPosicion.lon);
+    }
   }
 
   _actualizarIndicadorConexion(estado) {
@@ -115,8 +146,9 @@ class PanelTiempoReal {
     this._grafica.update();
 
     const gps = datos.data?.gps;
-    if (gps && gps.fix && this._mapa) {
-      this._mapa.centrar(gps.lat, gps.lon);
+    if (gps && gps.fix) {
+      this._ultimaPosicion = { lat: gps.lat, lon: gps.lon };
+      if (this._mapa) this._mapa.centrar(gps.lat, gps.lon);
     }
   }
 
@@ -135,8 +167,12 @@ class PanelTiempoReal {
       while (cuerpo.rows.length > 10) cuerpo.deleteRow(-1);
     }
 
-    if (this._mapa && datos.lat != null) {
-      this._mapa.agregarMarcador(datos.lat, datos.lon, datos.nombre_tipo);
+    if (datos.lat != null) {
+      if (this._mapa) {
+        this._mapa.agregarMarcador(datos.lat, datos.lon, datos.nombre_tipo);
+      } else {
+        this._marcadoresPendientes.push({ lat: datos.lat, lon: datos.lon, etiqueta: datos.nombre_tipo });
+      }
     }
 
     window.mostrarToast(`Nueva incidencia: ${datos.nombre_tipo} (${datos.placa})`);

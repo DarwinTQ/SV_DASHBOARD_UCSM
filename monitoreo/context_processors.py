@@ -12,5 +12,6 @@ def contexto_global(request):
     return {
         "url_publica": config.servidor.url_publica,
         "google_maps_api_key": config.maps.api_key,
+        "mapa_zoom": config.maps.zoom,
         "contador_sin_validar": contador_sin_validar,
     }

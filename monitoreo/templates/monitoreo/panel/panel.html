@@ -120,7 +120,8 @@
     new PanelTiempoReal({
       urlWebSocket: (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws/panel/",
       urlEstado: "{% url 'api_panel_estado' %}",
-      googleMapsApiKey: "{{ google_maps_api_key }}",
+      googleMapsApiKey: "{{ google_maps_api_key|escapejs }}",
+      mapaZoom: {{ mapa_zoom }},
     }).iniciar();
   });
 </script>

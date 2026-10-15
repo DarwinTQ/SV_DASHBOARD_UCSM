@@ -35,10 +35,15 @@
 {% block extra_js %}
 <script src="{% static 'monitoreo/js/mapa.js' %}"></script>
 <script>
-  document.addEventListener("DOMContentLoaded", function () {
-    const mapa = new MapaVehicular({ elementoId: "mapa-incidencias" });
+  document.addEventListener("DOMContentLoaded", async function () {
+    const mapa = await MapaVehicular.crear({
+      elementoId: "mapa-incidencias",
+      zoom: {{ mapa_zoom }},
+      apiKey: "{{ google_maps_api_key|escapejs }}",
+    });
 
     async function cargar() {
+      if (!mapa) return;
       const parametros = new URLSearchParams(new FormData(document.getElementById("form-filtros-mapa")));
       const resp = await fetch("{% url 'api_panel_incidencias_recientes' %}?" + parametros.toString(), { credentials: "same-origin" });
       const datos = await resp.json();
