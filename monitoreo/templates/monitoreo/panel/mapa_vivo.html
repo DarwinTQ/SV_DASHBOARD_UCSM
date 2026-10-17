@@ -1,0 +1,84 @@
+{% extends "monitoreo/base.html" %}
+{% load static %}
+{% block titulo %}Mapa en vivo{% endblock %}
+
+{% block contenido %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+  <h1 class="h4 mb-0">Mapa en vivo</h1>
+  {% if dispositivos|length > 1 %}
+  <form method="get" class="d-flex align-items-center gap-2">
+    <label for="selector-dispositivo" class="form-label mb-0 small">Dispositivo</label>
+    <select name="codigo" id="selector-dispositivo" class="form-select form-select-sm" onchange="this.form.submit()">
+      {% for dispositivo in dispositivos %}
+      <option value="{{ dispositivo.codigo }}" {% if dispositivo.codigo == codigo_mapa %}selected{% endif %}>
+        {{ dispositivo.codigo }} · {{ dispositivo.vehiculo.placa }}
+      </option>
+      {% endfor %}
+    </select>
+  </form>
+  {% endif %}
+</div>
+
+{% if codigo_mapa %}
+  {% include "monitoreo/componentes/_mapa_vivo.html" with prefijo="mapa-completo" codigo=codigo_mapa alto="calc(100vh - 330px)" titulo="Seguimiento en tiempo real" %}
+{% else %}
+  <div class="tarjeta">
+    <p class="text-muted mb-0">
+      Todavía no hay dispositivos registrados. Crea uno en
+      <a href="{% url 'monitoreo:dispositivo_lista' %}">Dispositivos</a> para ver su recorrido aquí.
+    </p>
+  </div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+{% if codigo_mapa %}
+<script src="{% static 'monitoreo/js/mapa.js' %}"></script>
+<script src="{% static 'monitoreo/js/mapa_vivo.js' %}"></script>
+<script>
+  document.addEventListener("DOMContentLoaded", function () {
+    const mapa = new MapaVehiculoVivo({
+      elementoId: "mapa-completo",
+      codigo: "{{ codigo_mapa|escapejs }}",
+      apiKey: "{{ google_maps_api_key|escapejs }}",
+      zoom: {{ mapa_zoom }},
+      prefijoIds: "mapa-completo",
+      urlRastro: "{% url 'api_panel_rastro' codigo_mapa %}",
+      urlLimpiar: "{% url 'api_panel_rastro_limpiar' codigo_mapa %}",
+    });
+    mapa.iniciar();
+
+    // Mismo WebSocket que el panel; aquí solo interesan gps e incidencias.
+    new ConexionTiempoReal({
+      url: (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws/panel/",
+      urlSondeo: "{% url 'api_panel_estado' %}",
+      onEstadoConexion: function (estado) {
+        const indicador = document.getElementById("indicador-conexion");
+        const texto = document.getElementById("texto-conexion");
+        if (!indicador) return;
+        indicador.classList.remove("conectado", "reconectando");
+        indicador.classList.add(estado);
+        if (texto) texto.textContent = estado === "conectado" ? "En vivo" : "Reconectando…";
+      },
+      onMensaje: function (mensaje) {
+        if (mensaje.tipo === "gps" && mensaje.data.codigo === "{{ codigo_mapa|escapejs }}") {
+          mapa.actualizarPosicion(mensaje.data.data);
+        } else if (mensaje.tipo === "incidencia_nueva" && mensaje.data.lat != null) {
+          mapa.agregarIncidencia(mensaje.data.lat, mensaje.data.lon, mensaje.data.nombre_tipo);
+        } else if (mensaje.tipo === "sondeo_estado") {
+          (mensaje.data.dispositivos || []).forEach(function (d) {
+            if (d.codigo === "{{ codigo_mapa|escapejs }}" && d.gps) mapa.actualizarPosicion(d.gps);
+          });
+        }
+      },
+    }).iniciar();
+
+    // Marcadores de las incidencias recientes con coordenadas.
+    {% for incidencia in incidencias_con_mapa %}
+    mapa.agregarIncidencia({{ incidencia.latitud }}, {{ incidencia.longitud }},
+      "{{ incidencia.tipo.nombre|escapejs }} · {{ incidencia.fecha_hora|date:'d/m/Y H:i'|escapejs }}");
+    {% endfor %}
+  });
+</script>
+{% endif %}
+{% endblock %}

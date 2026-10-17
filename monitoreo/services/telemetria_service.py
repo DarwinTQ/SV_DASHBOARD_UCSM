@@ -1,4 +1,10 @@
-"""Lógica de negocio de ``POST /api/v1/telemetria/`` (sección 7.2)."""
+"""Lógica de negocio de la telemetría del nodo (secciones 7.2 y 3.6).
+
+La comparten ``PuenteMQTT`` (tópico ``.../telemetria``, camino normal) y
+``POST /api/v1/telemetria/`` (respaldo): un solo lugar actualiza el
+dispositivo, ``EstadoEnVivo``, el heartbeat de ``estado_dispositivo`` y el
+WebSocket del panel.
+"""
 import logging
 
 from django.utils import timezone
@@ -64,10 +70,15 @@ class TelemetriaService:
     def _resumen_para_panel(datos: dict) -> dict:
         return {
             "armado": datos.get("armado"),
+            # v3.0.0: el modo decide qué reglas están activas y si YOLO alerta.
+            "modo": datos.get("modo"),
+            "modo_fuente": datos.get("modo_fuente"),
+            "contacto": datos.get("contacto"),
             "wifi": datos.get("wifi"),
             "sistema": datos.get("sistema"),
             "gps": datos.get("gps"),
             "imu": datos.get("imu"),
             "audio": datos.get("audio"),
             "bateria": datos.get("bateria"),
+            "mqtt": datos.get("mqtt"),
         }

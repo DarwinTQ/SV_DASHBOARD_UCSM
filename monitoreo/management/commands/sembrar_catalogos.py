@@ -13,6 +13,11 @@ from monitoreo.models import Conductor, Dispositivo, TipoEvento, Vehiculo
 class SembradorCatalogos:
     """Encapsula la siembra de datos base del sistema."""
 
+    # El nivel_riesgo NO es decorativo: es lo que decide la acción del servidor
+    # (ver ReglasAccion en monitoreo/services/reglas_accion.py).
+    #   ALTO  -> incidencia + alerta de Telegram a todos los autorizados
+    #   MEDIO -> incidencia + alerta SILENCIOSA (disable_notification)
+    #   BAJO  -> solo incidencia (registro, sin Telegram)
     CATALOGO_TIPOS_EVENTO = [
         {
             "codigo": "PERSONA",
@@ -20,6 +25,50 @@ class SembradorCatalogos:
             "nivel_riesgo": "ALTO",
             "descripcion": "YOLO detectó una persona junto al vehículo",
         },
+        # --- Reglas definitivas de la v3.0.0 (sección 3.4 del contrato MQTT) ---
+        {
+            "codigo": "CHOQUE",
+            "nombre": "Choque detectado",
+            "nivel_riesgo": "ALTO",
+            "descripcion": (
+                "En marcha: |a| ≥ 4 g confirmado con un golpe sonoro ≥ 112 dB SPL "
+                "dentro de ±500 ms"
+            ),
+        },
+        {
+            "codigo": "ROTURA_VENTANA",
+            "nombre": "Rotura de ventana",
+            "nivel_riesgo": "ALTO",
+            "descripcion": (
+                "Estacionado y armado: golpe de 150–400 Hz seguido de un estallido "
+                "de 3–7 kHz sostenido ≥ 150 ms, fusionado con la vibración del MPU"
+            ),
+        },
+        {
+            "codigo": "GOLPE_MANIPULACION",
+            "nombre": "Golpe / manipulación",
+            "nivel_riesgo": "MEDIO",
+            "descripcion": (
+                "Estacionado y armado: vibración > 0.15 g sin estallido de vidrio "
+                "en 1 s (alerta silenciosa)"
+            ),
+        },
+        {
+            "codigo": "IMPACTO_SIN_CONFIRMAR",
+            "nombre": "Impacto sin confirmar",
+            "nivel_riesgo": "BAJO",
+            "descripcion": "En marcha: |a| ≥ 4 g pero sin golpe sonoro en ±500 ms (solo registro)",
+        },
+        {
+            "codigo": "VIDRIO_ROTO_EXTERNO",
+            "nombre": "Vidrio roto externo",
+            "nivel_riesgo": "BAJO",
+            "descripcion": (
+                "Estallido de vidrio sin vibración en el vehículo: se rompió algo "
+                "cerca, no el auto (solo registro)"
+            ),
+        },
+        # --- Reglas legado de la v2.0.0 (cfg::REGLAS_LEGADO = false) -----------
         {
             "codigo": "VIBRACION",
             "nombre": "Golpe o vibración",

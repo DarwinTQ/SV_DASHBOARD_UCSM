@@ -1,0 +1,36 @@
+# ============================================================================
+#  Lista de control de acceso (ACL) de Mosquitto — UCSM
+#  Cada usuario solo puede tocar los tópicos que le corresponden.
+#  Recarga: reinicia el broker (o "net stop mosquitto && net start mosquitto").
+# ============================================================================
+
+# ----- Servidor Django: control total del prefijo del sistema ---------------
+user servidor
+topic readwrite ucsm/v1/#
+
+# ----- Nodo ESP32-S3 (client-id nodo-NODO-01) ------------------------------
+#  Publica: telemetria, gps, evento, estado, modo, sync/req
+#  Recibe:  config, cmd, sync/resp
+user nodo01
+topic write ucsm/v1/NODO-01/telemetria
+topic write ucsm/v1/NODO-01/gps
+topic write ucsm/v1/NODO-01/evento
+topic write ucsm/v1/NODO-01/estado
+topic write ucsm/v1/NODO-01/modo
+topic write ucsm/v1/NODO-01/sync/req
+topic read ucsm/v1/NODO-01/config
+topic read ucsm/v1/NODO-01/cmd
+topic read ucsm/v1/NODO-01/sync/resp
+
+# ----- Cámara ESP32-CAM (client-id cam-NODO-01) ----------------------------
+#  Publica: cam/estado (retenido + Last Will).  Recibe: cam/cmd
+user cam01
+topic write ucsm/v1/NODO-01/cam/estado
+topic read ucsm/v1/NODO-01/cam/cmd
+
+# ============================================================================
+#  Para agregar un segundo vehículo (NODO-02):
+#    mosquitto_passwd -b passwd nodo02 <clave>
+#    mosquitto_passwd -b passwd cam02  <clave>
+#  y duplicar los dos bloques anteriores cambiando NODO-01 por NODO-02.
+# ============================================================================

@@ -15,11 +15,24 @@ class ConfiguracionController(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         from monitoreo.bot.estado_bot import EstadoBot
+        from monitoreo.models import Dispositivo
+        from monitoreo.workers.puente_mqtt import PuenteMQTT
+        from monitoreo.workers.receptor_stream import ReceptorStreamCamara
 
         contexto = super().get_context_data(**kwargs)
         contexto["resumen"] = config.resumen_seguro()
         contexto["umbrales"] = config.umbrales.a_dict()
+        contexto["deteccion"] = config.deteccion.a_dict()
         contexto["estado_bot"] = EstadoBot.instancia().resumen()
+
+        # Salud del enlace MQTT y de los streams (v3.0.0). Ambos devuelven
+        # valores neutros si el worker no está corriendo (p. ej. con runserver).
+        contexto["mqtt"] = PuenteMQTT.resumen_estado()
+        contexto["streams"] = ReceptorStreamCamara.resumen_streams()
+
+        dispositivos = list(Dispositivo.objects.select_related("vehiculo").all())
+        contexto["dispositivos"] = dispositivos
+        contexto["primer_dispositivo"] = dispositivos[0].codigo if dispositivos else ""
         return contexto
 
 

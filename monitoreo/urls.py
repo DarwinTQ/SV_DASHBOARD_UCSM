@@ -22,7 +22,7 @@ from monitoreo.controllers.web.incidencia_controller import (
     IncidenciaDetalleController, IncidenciaListController, IncidenciaMapaController,
 )
 from monitoreo.controllers.web.media_controller import MediaController
-from monitoreo.controllers.web.panel_controller import PanelController
+from monitoreo.controllers.web.panel_controller import MapaVivoController, PanelController
 from monitoreo.controllers.web.resultados_controller import ExportarExcelController, ResultadosController
 from monitoreo.controllers.web.tipo_evento_controller import (
     TipoEventoCreateController, TipoEventoDeleteController, TipoEventoDetalleController,
@@ -42,6 +42,7 @@ urlpatterns = [
 
     # Panel en tiempo real
     path("", PanelController.as_view(), name="panel"),
+    path("mapa-en-vivo/", MapaVivoController.as_view(), name="mapa_vivo"),
 
     # Incidencias
     path("incidencias/", IncidenciaListController.as_view(), name="incidencia_lista"),

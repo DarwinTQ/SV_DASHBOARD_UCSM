@@ -39,11 +39,15 @@ class DifusorAlertasFalso:
     def __init__(self, exitoso=True):
         self._exitoso = exitoso
         self.llamadas = []
+        self.silenciosas = []
+        self.evidencias = []
 
-    def difundir(self, incidencia, resultado_yolo=None):
+    def difundir(self, incidencia, resultado_yolo=None, silenciosa=False, evidencia=None):
         from monitoreo.services.difusor_alertas import ResultadoDifusion
 
         self.llamadas.append(incidencia.pk)
+        self.silenciosas.append(silenciosa)
+        self.evidencias.append(evidencia)
         alerta = AlertaTelegram.objects.create(
             incidencia=incidencia, conductor=incidencia.dispositivo.vehiculo.conductor,
             chat_id="12345", mensaje="mensaje de prueba", con_imagen=True,

@@ -44,3 +44,17 @@ class NotificadorTiempoReal:
     @classmethod
     def frame(cls, data: dict) -> None:
         cls.enviar("frame", data)
+
+    @classmethod
+    def gps(cls, codigo: str, data: dict) -> None:
+        """Posición en vivo para el mapa (sección 5.6). El nodo publica a 5 Hz
+        en marcha, así que este es el mensaje más frecuente del socket."""
+        cls.enviar("gps", {"codigo": codigo, "data": data})
+
+    @classmethod
+    def modo(cls, codigo: str, data: dict) -> None:
+        cls.enviar("modo", {"codigo": codigo, "data": data})
+
+    @classmethod
+    def camara_estado(cls, codigo: str, data: dict) -> None:
+        cls.enviar("camara_estado", {"codigo": codigo, "data": data})

@@ -4,6 +4,7 @@ channels>=4
 daphne>=4
 whitenoise
 python-dotenv
+paho-mqtt>=2
 requests
 numpy
 opencv-python-headless

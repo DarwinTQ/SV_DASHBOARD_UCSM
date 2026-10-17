@@ -142,6 +142,13 @@ LOGGING = {
             "datefmt": "%Y-%m-%d %H:%M:%S",
         },
     },
+    "filters": {
+        # Los cortes de conexión del navegador no son fallos: ver el docstring
+        # de FiltroDesconexionCliente.
+        "sin_desconexiones": {
+            "()": "monitoreo.security.filtros_log.FiltroDesconexionCliente",
+        },
+    },
     "handlers": {
         "consola": {
             "class": "logging.StreamHandler",
@@ -163,5 +170,11 @@ LOGGING = {
     "loggers": {
         "django": {"handlers": ["consola", "archivo"], "level": "INFO", "propagate": False},
         "monitoreo": {"handlers": ["consola", "archivo"], "level": "DEBUG", "propagate": False},
+        "asyncio": {
+            "handlers": ["consola", "archivo"],
+            "level": "WARNING",
+            "propagate": False,
+            "filters": ["sin_desconexiones"],
+        },
     },
 }

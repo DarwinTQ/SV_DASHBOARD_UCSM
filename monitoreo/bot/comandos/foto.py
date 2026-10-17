@@ -24,15 +24,19 @@ class ComandoFoto(ComandoBase):
         self.responder_dispositivo(ctx, dispositivo, con_flash=con_flash)
 
     def responder_dispositivo(self, ctx, dispositivo, con_flash: bool = False) -> None:
-        from config import config
-        from monitoreo.services.camara_service import FabricaCamara
+        """Con flash se pide una captura real (el stream no enciende el LED);
+        sin flash se toma el cuadro más reciente del stream MJPEG, que es
+        instantáneo (sección 5.5)."""
+        from monitoreo.services.camara_service import FabricaCamara, ProveedorCuadros
         from monitoreo.services.detector_yolo import DetectorYOLO
-        from monitoreo.services.estado_en_vivo import EstadoEnVivo
 
         ctx.cliente.send_chat_action(ctx.chat_id, "upload_photo")
         inicio_total = _time.monotonic()
 
-        captura = FabricaCamara.para(dispositivo.codigo).capturar(con_flash=con_flash)
+        if con_flash:
+            captura = FabricaCamara.para(dispositivo.codigo).capturar(con_flash=True)
+        else:
+            captura = ProveedorCuadros().mas_reciente(dispositivo.codigo)
         if not captura.exito:
             self._responder_con_ultimo_frame(ctx, dispositivo, captura.error)
             return

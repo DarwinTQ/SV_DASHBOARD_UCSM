@@ -5,6 +5,9 @@
     <a href="{% url 'monitoreo:panel' %}" class="sidebar__enlace {% enlace_activo 'monitoreo:panel' %}">
       <i class="bi bi-speedometer2"></i> Panel en tiempo real
     </a>
+    <a href="{% url 'monitoreo:mapa_vivo' %}" class="sidebar__enlace {% enlace_activo 'monitoreo:mapa_vivo' %}">
+      <i class="bi bi-geo-alt-fill"></i> Mapa en vivo
+    </a>
     <a href="{% url 'monitoreo:incidencia_lista' %}" class="sidebar__enlace {% enlace_activo 'monitoreo:incidencia_lista' %}">
       <i class="bi bi-exclamation-triangle"></i> Incidencias
       {% if contador_sin_validar %}<span class="sidebar__contador">{{ contador_sin_validar }}</span>{% endif %}

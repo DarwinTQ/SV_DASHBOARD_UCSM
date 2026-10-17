@@ -92,21 +92,28 @@ class ClienteBotAPI:
     # Envío de mensajes
     # ------------------------------------------------------------------ #
     def send_message(self, chat_id: str, text: str, reply_markup: Optional[dict] = None,
-                      parse_mode: str = "HTML") -> dict:
+                      parse_mode: str = "HTML", disable_notification: bool = False) -> dict:
+        """``disable_notification=True`` -> alerta silenciosa: el mensaje llega
+        igual pero el teléfono no suena (tipos de riesgo MEDIO, sección 5.4)."""
         import json
 
         data = {"chat_id": chat_id, "text": text, "parse_mode": parse_mode}
         if reply_markup is not None:
             data["reply_markup"] = json.dumps(reply_markup)
+        if disable_notification:
+            data["disable_notification"] = True
         return self._llamar("sendMessage", data=data, timeout=self._timeout)
 
     def send_photo(self, chat_id: str, foto_bytes: bytes, caption: str = "",
-                    reply_markup: Optional[dict] = None, parse_mode: str = "HTML") -> dict:
+                    reply_markup: Optional[dict] = None, parse_mode: str = "HTML",
+                    disable_notification: bool = False) -> dict:
         import json
 
         data = {"chat_id": chat_id, "caption": caption[:1024], "parse_mode": parse_mode}
         if reply_markup is not None:
             data["reply_markup"] = json.dumps(reply_markup)
+        if disable_notification:
+            data["disable_notification"] = True
         return self._llamar(
             "sendPhoto", data=data, files={"photo": ("foto.jpg", foto_bytes, "image/jpeg")},
             timeout=config.telegram.foto_timeout_s + self._timeout,

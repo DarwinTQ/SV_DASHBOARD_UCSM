@@ -27,14 +27,22 @@ class ClienteBotAPIFalso:
     def get_updates(self, offset=None, timeout=None, allowed_updates=None):
         return {"ok": True, "result": [], "_status_code": 200}
 
-    def send_message(self, chat_id, text, reply_markup=None, parse_mode="HTML"):
+    def send_message(self, chat_id, text, reply_markup=None, parse_mode="HTML",
+                     disable_notification=False):
         self._contador_mensaje_id += 1
-        self.mensajes_enviados.append({"chat_id": chat_id, "texto": text, "reply_markup": reply_markup})
+        self.mensajes_enviados.append({
+            "chat_id": chat_id, "texto": text, "reply_markup": reply_markup,
+            "silenciosa": disable_notification,
+        })
         return {"ok": True, "result": {"message_id": self._contador_mensaje_id}, "_status_code": 200}
 
-    def send_photo(self, chat_id, foto_bytes, caption="", reply_markup=None, parse_mode="HTML"):
+    def send_photo(self, chat_id, foto_bytes, caption="", reply_markup=None, parse_mode="HTML",
+                   disable_notification=False):
         self._contador_mensaje_id += 1
-        self.fotos_enviadas.append({"chat_id": chat_id, "caption": caption, "reply_markup": reply_markup})
+        self.fotos_enviadas.append({
+            "chat_id": chat_id, "caption": caption, "reply_markup": reply_markup,
+            "silenciosa": disable_notification,
+        })
         return {"ok": True, "result": {"message_id": self._contador_mensaje_id}, "_status_code": 200}
 
     def send_location(self, chat_id, lat, lon):

@@ -143,16 +143,30 @@ class FormateadorMensajes:
             return "No hay incidencias registradas todavía."
         return "\n\n".join(self.incidencia_resumen(inc) for inc in incidencias)
 
-    def alerta_incidencia(self, incidencia, resultado_yolo=None) -> str:
+    def alerta_incidencia(self, incidencia, resultado_yolo=None, evidencia=None,
+                          silenciosa: bool = False) -> str:
+        """Texto de la alerta que difunde ``DifusorAlertas``.
+
+        Muestra la evidencia resumida de la regla que disparó el evento
+        ("6.8 g + 115 dB en 42 ms", "estallido 208 ms, planitud 0.42"), que es
+        lo que permite al propietario juzgar la alerta de un vistazo.
+        """
+        from monitoreo.services.reglas_accion import DescriptorEvidencia
+
         vehiculo = incidencia.dispositivo.vehiculo
+        encabezado = "🔔 <b>AVISO" if silenciosa else "🚨 <b>ALERTA"
         lineas = [
-            f"🚨 <b>ALERTA: {incidencia.tipo.nombre}</b> — riesgo {incidencia.tipo.nivel_riesgo}",
+            f"{encabezado}: {incidencia.tipo.nombre}</b> — riesgo {incidencia.tipo.nivel_riesgo}",
             f"🚗 <b>{vehiculo.placa}</b> · {vehiculo.marca} {vehiculo.modelo} · {vehiculo.color}",
         ]
         detalle_tiempo = f"🕒 {_fh(incidencia.fecha_hora)}"
         if resultado_yolo is not None and getattr(resultado_yolo, "confianza_max", None):
             detalle_tiempo += f" · 📈 {resultado_yolo.confianza_max:.0%} · {resultado_yolo.num_personas} persona(s)"
         lineas.append(detalle_tiempo)
+
+        resumen = DescriptorEvidencia.resumen_corto(incidencia.tipo.codigo, evidencia)
+        if resumen:
+            lineas.append(f"📐 {resumen}")
         if incidencia.observacion:
             lineas.append(f"🔎 {incidencia.observacion.splitlines()[0][:150]}")
         return "\n".join(lineas)[:1024]

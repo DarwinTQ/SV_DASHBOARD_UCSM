@@ -301,3 +301,87 @@ table.tabla-datos tr:hover td { background: var(--verde-10); }
 }
 
 img { max-width: 100%; }
+
+/* ==========================================================================
+   Mapa en vivo (sección 5.6) — solo verde #0cb967 y blanco
+   ========================================================================== */
+.mapa-vivo__codigo {
+  font-family: var(--fuente-texto);
+  font-size: .75rem;
+  font-weight: 600;
+  color: var(--verde-oscuro);
+  background: var(--verde-10);
+  border-radius: 999px;
+  padding: .1rem .55rem;
+  margin-left: .4rem;
+  vertical-align: middle;
+}
+
+.mapa-vivo__acciones { display: flex; flex-wrap: wrap; gap: .35rem; }
+
+/* El botón "Seguir vehículo" es un interruptor: se marca cuando está activo. */
+.mapa-vivo__acciones .boton-seguir.activo {
+  background: var(--verde);
+  border-color: var(--verde);
+  color: var(--blanco);
+}
+
+.mapa-vivo__lienzo {
+  position: relative;
+  border: 1px solid var(--verde-20);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.mapa-vivo__mapa { width: 100%; height: 100%; }
+
+/* Aviso "Sin señal GPS": flotante, sin tapar el mapa. */
+.mapa-vivo__aviso {
+  position: absolute;
+  top: .5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 500;
+  background: var(--blanco);
+  color: var(--verde-texto);
+  border: 1px solid var(--verde-40);
+  border-radius: 999px;
+  padding: .2rem .8rem;
+  font-size: .8rem;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(10, 61, 36, .15);
+}
+
+.mapa-vivo__datos {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: .5rem 1rem;
+  margin: .75rem 0 0;
+}
+.mapa-vivo__datos dt {
+  font-size: .72rem;
+  font-weight: 600;
+  color: var(--verde-oscuro);
+  margin: 0;
+}
+.mapa-vivo__datos dd {
+  font-size: .9rem;
+  font-weight: 600;
+  color: var(--verde-texto);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+/* Marcador de flecha del respaldo Leaflet (Google rota su propio símbolo). */
+.marcador-vehiculo-contenedor { background: none; border: none; }
+.marcador-vehiculo {
+  width: 26px;
+  height: 26px;
+  transform-origin: 50% 50%;
+  transition: transform .12s linear;
+  filter: drop-shadow(0 1px 2px rgba(10, 61, 36, .35));
+}
+
+@media (max-width: 991px) {
+  .mapa-vivo__datos { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

@@ -22,3 +22,11 @@ modelos_ia/*.pt
 
 # Exportaciones generadas
 resultados_monitoreo_ucsm.xlsx
+
+# Pruebas de host del firmware (binarios compilados)
+firmware/pruebas/*.exe
+firmware/pruebas/*.obj
+
+# Mosquitto (secretos y persistencia del broker)
+infra/mosquitto/passwd
+infra/mosquitto/mosquitto.db

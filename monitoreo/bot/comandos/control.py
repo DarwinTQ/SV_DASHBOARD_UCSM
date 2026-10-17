@@ -44,20 +44,24 @@ class ComandoDesarmar(ComandoBase):
 
 def aplicar_control(ctx, dispositivo, armar: bool) -> None:
     """Ejecuta el cambio real (lo llama el comando tras confirmar, o el botón
-    '🔓 Desarmar' de una alerta). Avisa a TODOS los accesos del vehículo."""
+    '🔓 Desarmar' de una alerta). Avisa a TODOS los accesos del vehículo.
+
+    El cambio llega al ESP32-S3 por el tópico MQTT ``config`` (retenido): eso
+    lo hace ``ControlArmadoService``, el mismo que usa la web.
+    """
     from django.utils import timezone
 
     from monitoreo.models import AccesoTelegram
-    from monitoreo.services.notificador_tiempo_real import NotificadorTiempoReal
+    from monitoreo.services.control_armado_service import ControlArmadoService
 
-    dispositivo.estado = "ACTIVO" if armar else "INACTIVO"
-    dispositivo.save(update_fields=["estado"])
-    NotificadorTiempoReal.dispositivo_estado({"codigo": dispositivo.codigo, "armado": dispositivo.armado})
+    resultado = ControlArmadoService().aplicar(dispositivo, armar)
 
     quien = _nombre_quien(ctx, dispositivo.vehiculo)
     verbo = "armó" if armar else "desarmó"
     hora = timezone.localtime().strftime("%H:%M")
     texto = f"{'🔒' if armar else '🔓'} {quien} {verbo} la vigilancia de {dispositivo.vehiculo.placa} a las {hora}."
+    if not resultado.publicado_mqtt:
+        texto += "\n⚠️ El nodo está sin conexión: recibirá el cambio al reconectarse."
 
     destinatarios = AccesoTelegram.objects.filter(vehiculo=dispositivo.vehiculo, activo=True).exclude(chat_id="")
     for destinatario in destinatarios:

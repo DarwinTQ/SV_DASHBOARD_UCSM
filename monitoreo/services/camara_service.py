@@ -23,6 +23,11 @@ class ResultadoCaptura:
     alto: Optional[int] = None
     captura_ms: Optional[float] = None
     error: Optional[str] = None
+    # v3.0.0: de dónde salió la imagen ("stream", "captura", "simulada") y, si
+    # vino del buffer del stream, a cuántos ms del instante pedido estaba.
+    # Se registra en observacion de la incidencia (sección 5.5).
+    metodo: str = ""
+    desfase_ms: Optional[float] = None
 
 
 class ClienteCamaraESP32:
@@ -71,7 +76,7 @@ class ClienteCamaraESP32:
                 exito=True, jpg=resp.content,
                 ancho=int(resp.headers.get("X-Frame-Width", 0) or 0) or None,
                 alto=int(resp.headers.get("X-Frame-Height", 0) or 0) or None,
-                captura_ms=captura_ms,
+                captura_ms=captura_ms, metodo="captura",
             )
         except requests.RequestException as exc:
             logger.warning("Fallo al capturar de la cámara %s: %s", self.codigo, exc)
@@ -132,7 +137,7 @@ class CamaraSimulada:
         time.sleep(random.uniform(0.08, 0.15))
         return ResultadoCaptura(
             exito=True, jpg=ruta.read_bytes(), ancho=640, alto=480,
-            captura_ms=round(random.uniform(80, 150), 1),
+            captura_ms=round(random.uniform(80, 150), 1), metodo="simulada",
         )
 
     def obtener_estado(self) -> dict:
@@ -150,3 +155,59 @@ class FabricaCamara:
         if config.esp32cam.simulada:
             return CamaraSimulada(codigo_dispositivo)
         return ClienteCamaraESP32(codigo_dispositivo)
+
+
+class ProveedorCuadros:
+    """Elige la mejor fuente de imagen disponible (sección 5.5).
+
+    Orden de preferencia:
+      1. el **buffer del stream MJPEG** que llena ``ReceptorStreamCamara``
+         (instantáneo, y permite pedir el cuadro de un instante concreto);
+      2. ``GET /capture`` como respaldo, si el stream no está disponible.
+
+    Siempre deja constancia del método usado en ``ResultadoCaptura.metodo``,
+    que ``IncidenciaService`` copia a ``observacion``.
+    """
+
+    def __init__(self, fabrica_camara=None, registro_buffers=None):
+        self._fabrica = fabrica_camara or FabricaCamara
+        if registro_buffers is not None:
+            self._registro = registro_buffers
+        else:
+            from monitoreo.services.buffer_cuadros import RegistroBuffers
+
+            self._registro = RegistroBuffers.instancia()
+
+    def _buffer(self, codigo: str):
+        return self._registro.existente(codigo)
+
+    @staticmethod
+    def _desde_cuadro(cuadro, desfase_ms: Optional[float]) -> ResultadoCaptura:
+        return ResultadoCaptura(
+            exito=True, jpg=cuadro.jpg, ancho=cuadro.ancho, alto=cuadro.alto,
+            # El cuadro ya estaba en memoria: el costo de "captura" es cero, que
+            # es justamente la mejora que se mide en el capítulo de resultados.
+            captura_ms=0.0, metodo="stream", desfase_ms=desfase_ms,
+        )
+
+    def mas_reciente(self, codigo: str) -> ResultadoCaptura:
+        """Para ``VigilanciaVisual``: el último cuadro del vídeo en vivo."""
+        buffer = self._buffer(codigo)
+        if buffer is not None:
+            cuadro = buffer.ultimo()
+            if cuadro is not None:
+                return self._desde_cuadro(cuadro, 0.0)
+        return self._fabrica.para(codigo).capturar()
+
+    def cercano_a(self, codigo: str, t_objetivo_ms: Optional[int]) -> ResultadoCaptura:
+        """Para ``IncidenciaService``: el cuadro de cuando ocurrió el evento."""
+        buffer = self._buffer(codigo)
+        if buffer is not None:
+            cuadro = buffer.mas_cercano_a(t_objetivo_ms)
+            if cuadro is not None:
+                desfase = (
+                    abs(cuadro.t_recepcion_ms - t_objetivo_ms)
+                    if t_objetivo_ms is not None else None
+                )
+                return self._desde_cuadro(cuadro, desfase)
+        return self._fabrica.para(codigo).capturar()

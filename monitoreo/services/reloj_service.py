@@ -18,3 +18,11 @@ class RelojServidor:
         if ms is None:
             return None
         return datetime.fromtimestamp(ms / 1000, tz=timezone.utc)
+
+    @staticmethod
+    def a_ms(momento: datetime | None) -> int | None:
+        """Inverso de ``ms_a_datetime``: lo usa el buffer de cuadros del stream
+        para buscar el frame más cercano a ``t_deteccion_sensor``."""
+        if momento is None:
+            return None
+        return int(momento.timestamp() * 1000)

@@ -2,6 +2,18 @@
 métricas (sección 8.1). Lo ejecuta ``ProcesadorEventos`` en su hilo para los
 eventos de sensor, y ``VigilanciaVisual`` para las incidencias PERSONA
 detectadas por la vigilancia visual continua (sección 8.2).
+
+Cambios de la v3.0.0 (sección 5.4):
+
+* La imagen sale del **buffer del stream MJPEG**, eligiendo el cuadro más
+  cercano a ``t_deteccion_sensor``; solo si no hay stream se pide ``/capture``.
+  El método usado queda anotado en ``observacion``.
+* La acción (alerta normal / alerta silenciosa / solo registro) la decide
+  ``ReglasAccion`` a partir de ``tipo_evento.nivel_riesgo``, no el firmware.
+  El ``nivel`` que propone el nodo se valida y se registra en ``observacion``.
+* La ``evidencia`` numérica de la regla (energías por banda, piso de ruido,
+  planitud, duración del estallido, pico de g, desfase sonido-golpe) se guarda
+  como texto legible en ``observacion`` y resumida en el texto de Telegram.
 """
 from __future__ import annotations
 
@@ -13,11 +25,12 @@ from django.db import transaction
 
 from config import config
 from monitoreo.models import Dispositivo, DeteccionYolo, Incidencia, MedicionTiempo, TipoEvento
-from monitoreo.services.camara_service import FabricaCamara, ResultadoCaptura
+from monitoreo.services.camara_service import ProveedorCuadros, ResultadoCaptura
 from monitoreo.services.detector_yolo import DetectorYOLO, ResultadoDeteccion
 from monitoreo.services.difusor_alertas import DifusorAlertas
 from monitoreo.services.mapas_service import MapasService
 from monitoreo.services.notificador_tiempo_real import NotificadorTiempoReal
+from monitoreo.services.reglas_accion import DescriptorEvidencia, ReglasAccion
 from monitoreo.services.reloj_service import RelojServidor
 
 logger = logging.getLogger("monitoreo.servicios")
@@ -27,15 +40,19 @@ class IncidenciaService:
     """Orquesta el pipeline completo. Las dependencias se pueden inyectar
     (pruebas con dobles de cámara/YOLO/difusor de alertas)."""
 
-    def __init__(self, difusor_alertas=None, mapas_service=None, detector_yolo=None, fabrica_camara=None):
+    def __init__(self, difusor_alertas=None, mapas_service=None, detector_yolo=None,
+                 fabrica_camara=None, proveedor_cuadros=None):
         self._difusor = difusor_alertas or DifusorAlertas()
         self._mapas = mapas_service or MapasService()
         self._detector = detector_yolo
-        self._fabrica_camara = fabrica_camara or FabricaCamara
+        self._proveedor = proveedor_cuadros or ProveedorCuadros(fabrica_camara=fabrica_camara)
 
     def _obtener_detector(self):
         return self._detector or DetectorYOLO.instancia()
 
+    # ------------------------------------------------------------------ #
+    # Entradas del pipeline
+    # ------------------------------------------------------------------ #
     def procesar_evento_sensor(self, evento: dict) -> Optional[Incidencia]:
         codigo = evento["codigo"]
         dispositivo = (
@@ -51,7 +68,9 @@ class IncidenciaService:
         t_recepcion_servidor = RelojServidor.ms_a_datetime(evento["t_recepcion_ms"])
         t_deteccion_sensor = RelojServidor.ms_a_datetime(ts_ms) if ts_ms else t_recepcion_servidor
 
-        captura = self._fabrica_camara.para(codigo).capturar()
+        # El cuadro más cercano al instante del sensor: la imagen de cuando
+        # realmente pasó el golpe, no la de varios cientos de ms después.
+        captura = self._proveedor.cercano_a(codigo, ts_ms or evento["t_recepcion_ms"])
 
         resultado_yolo = ResultadoDeteccion()
         t_inicio_inferencia = t_fin_inferencia = None
@@ -66,15 +85,13 @@ class IncidenciaService:
             observaciones.append("Sin reloj del sensor (ts_ms nulo): se usó la hora de recepción del servidor.")
         if not captura.exito:
             observaciones.append(f"No se pudo capturar imagen de la cámara: {captura.error}.")
+        observaciones.append(self._nota_imagen(captura))
+        observaciones.append(self._nota_contexto(evento))
+        observaciones.append(
+            DescriptorEvidencia.texto_completo(tipo_codigo_original, evento.get("evidencia"))
+        )
 
-        tipo_final_codigo = tipo_codigo_original
-        if resultado_yolo.hay_persona:
-            tipo_final_codigo = "PERSONA"
-            unidad = evento.get("unidad", "")
-            observaciones.append(
-                f"Disparado por sensor: {tipo_codigo_original} "
-                f"({evento.get('valor')} {unidad} ≥ {evento.get('umbral')} {unidad})."
-            )
+        tipo_final_codigo = self._tipo_final(tipo_codigo_original, resultado_yolo, evento, observaciones)
 
         gps = evento.get("gps") or {}
         latitud = gps.get("lat") if gps.get("fix") else None
@@ -82,12 +99,13 @@ class IncidenciaService:
 
         return self._persistir_y_notificar(
             dispositivo=dispositivo, tipo_codigo=tipo_final_codigo, fecha_hora=t_deteccion_sensor,
-            aceleracion_g=evento.get("aceleracion_g"), nivel_audio_db=evento.get("nivel_audio_db"),
+            aceleracion_g=self._aceleracion(evento), nivel_audio_db=self._nivel_audio(evento),
             latitud=latitud, longitud=longitud, captura=captura, resultado_yolo=resultado_yolo,
-            observacion=" ".join(observaciones),
+            observacion=" ".join(p for p in observaciones if p),
             t_deteccion_sensor=t_deteccion_sensor, t_recepcion_servidor=t_recepcion_servidor,
             t_inicio_inferencia=t_inicio_inferencia, t_fin_inferencia=t_fin_inferencia,
-            sin_reloj_sensor=sin_reloj_sensor,
+            sin_reloj_sensor=sin_reloj_sensor, nivel_firmware=evento.get("nivel"),
+            evidencia=evento.get("evidencia"),
         )
 
     def registrar_incidencia_persona(
@@ -96,29 +114,111 @@ class IncidenciaService:
     ) -> Incidencia:
         """Usado por VigilanciaVisual: la captura y la inferencia ya ocurrieron
         en el ciclo continuo de YOLO, aquí solo se persiste y se notifica."""
+        observaciones = [
+            "Detectado por vigilancia visual continua (YOLO) con el vehículo ESTACIONADO y armado.",
+            self._nota_imagen(captura),
+        ]
         return self._persistir_y_notificar(
             dispositivo=dispositivo, tipo_codigo="PERSONA", fecha_hora=t_deteccion_sensor,
             aceleracion_g=None, nivel_audio_db=None, latitud=None, longitud=None,
             captura=captura, resultado_yolo=resultado_yolo,
-            observacion="Detectado por vigilancia visual continua (YOLO).",
+            observacion=" ".join(p for p in observaciones if p),
             t_deteccion_sensor=t_deteccion_sensor, t_recepcion_servidor=t_recepcion_servidor,
             t_inicio_inferencia=t_inicio_inferencia, t_fin_inferencia=t_fin_inferencia,
-            sin_reloj_sensor=False,
+            sin_reloj_sensor=False, nivel_firmware=None, evidencia=None,
         )
 
+    # ------------------------------------------------------------------ #
+    # Armado de la observación
+    # ------------------------------------------------------------------ #
+    @staticmethod
+    def _nota_imagen(captura: ResultadoCaptura) -> str:
+        """Registra de dónde salió la imagen (sección 5.5)."""
+        if not captura.exito:
+            return ""
+        if captura.metodo == "stream":
+            if captura.desfase_ms is not None:
+                return f"Imagen del stream MJPEG, a {captura.desfase_ms:.0f} ms del instante del sensor."
+            return "Imagen del stream MJPEG (cuadro más reciente)."
+        if captura.metodo == "simulada":
+            return "Imagen de la cámara simulada."
+        return "Imagen pedida a /capture (sin stream disponible)."
+
+    @staticmethod
+    def _nota_contexto(evento: dict) -> str:
+        """Modo del vehículo y armado en el momento del evento."""
+        partes = []
+        if evento.get("modo"):
+            partes.append(f"modo {evento['modo']}")
+        if evento.get("armado") is not None:
+            partes.append("armado" if evento["armado"] else "desarmado")
+        if evento.get("origen"):
+            partes.append(f"vía {evento['origen']}")
+        return f"Contexto del nodo: {', '.join(partes)}." if partes else ""
+
+    def _tipo_final(self, tipo_original: str, resultado_yolo, evento: dict, observaciones: list) -> str:
+        """YOLO reclasifica a PERSONA cuando ve a alguien junto al vehículo.
+
+        Un CHOQUE no se reclasifica: es una emergencia por sí mismo y perdería
+        su evidencia; en los demás casos ver a una persona es más informativo
+        que el disparo del sensor.
+        """
+        if not resultado_yolo.hay_persona:
+            return tipo_original
+        if tipo_original == "CHOQUE":
+            observaciones.append(
+                f"YOLO además detectó {resultado_yolo.num_personas} persona(s) en la escena."
+            )
+            return tipo_original
+
+        detalle = self._detalle_disparo(tipo_original, evento)
+        observaciones.append(f"Disparado por sensor: {tipo_original}{detalle}.")
+        return "PERSONA"
+
+    @staticmethod
+    def _detalle_disparo(tipo_original: str, evento: dict) -> str:
+        resumen = DescriptorEvidencia.resumen_corto(tipo_original, evento.get("evidencia"))
+        if resumen:
+            return f" ({resumen})"
+        # Camino legado (v2.0.0): valor/umbral/unidad.
+        if evento.get("valor") is not None:
+            unidad = evento.get("unidad", "")
+            return f" ({evento.get('valor')} {unidad} ≥ {evento.get('umbral')} {unidad})"
+        return ""
+
+    @staticmethod
+    def _aceleracion(evento: dict):
+        """``a_pico_g`` de la evidencia si existe; si no, ``aceleracion_g``."""
+        evidencia = evento.get("evidencia") or {}
+        return evidencia.get("a_pico_g") or evento.get("aceleracion_g")
+
+    @staticmethod
+    def _nivel_audio(evento: dict):
+        """``spl_pico_db`` de la evidencia si existe; si no, ``nivel_audio_db``."""
+        evidencia = evento.get("evidencia") or {}
+        return evidencia.get("spl_pico_db") or evento.get("nivel_audio_db")
+
+    # ------------------------------------------------------------------ #
+    # Persistencia y notificación
+    # ------------------------------------------------------------------ #
     def _persistir_y_notificar(
         self, *, dispositivo, tipo_codigo, fecha_hora, aceleracion_g, nivel_audio_db,
         latitud, longitud, captura, resultado_yolo, observacion,
-        t_deteccion_sensor, t_recepcion_servidor, t_inicio_inferencia, t_fin_inferencia, sin_reloj_sensor,
+        t_deteccion_sensor, t_recepcion_servidor, t_inicio_inferencia, t_fin_inferencia,
+        sin_reloj_sensor, nivel_firmware=None, evidencia=None,
     ) -> Incidencia:
         tipo = TipoEvento.objects.get(codigo=tipo_codigo)
+        accion = ReglasAccion.para(tipo)
+        nota_nivel = ReglasAccion.validar_nivel_firmware(tipo, nivel_firmware)
+        observacion = " ".join(p for p in (observacion, nota_nivel) if p).strip()
+
         nombre_archivo = self._nombre_archivo(fecha_hora, dispositivo.codigo)
 
         with transaction.atomic():
             incidencia = Incidencia(
                 dispositivo=dispositivo, tipo=tipo, fecha_hora=fecha_hora,
                 aceleracion_g=aceleracion_g, nivel_audio_db=nivel_audio_db,
-                latitud=latitud, longitud=longitud, observacion=observacion.strip(),
+                latitud=latitud, longitud=longitud, observacion=observacion,
             )
             if captura.exito and captura.jpg:
                 incidencia.imagen.save(nombre_archivo, ContentFile(captura.jpg), save=False)
@@ -137,18 +237,25 @@ class IncidenciaService:
             ])
 
         t_registro_bd = RelojServidor.ahora()
-        self._notificar_nueva(incidencia, resultado_yolo)
+        self._notificar_nueva(incidencia, resultado_yolo, accion)
 
         t_envio_telegram = t_confirmacion_telegram = None
         alerta_estado = None
-        if config.telegram.enviar_sin_persona or resultado_yolo.hay_persona:
+        if self._debe_alertar(accion, resultado_yolo):
             t_envio_telegram = RelojServidor.ahora()
-            resultado_difusion = self._difusor.difundir(incidencia, resultado_yolo)
+            resultado_difusion = self._difusor.difundir(
+                incidencia, resultado_yolo, silenciosa=accion.silenciosa, evidencia=evidencia,
+            )
             t_confirmacion_telegram = resultado_difusion.t_primera_confirmacion or RelojServidor.ahora()
             alerta_estado = "ENVIADO" if resultado_difusion.exito else "FALLIDO"
             if resultado_difusion.exito:
                 incidencia.estado = "NOTIFICADA"
                 incidencia.save(update_fields=["estado"])
+        else:
+            logger.info(
+                "Incidencia #%s (%s, riesgo %s): %s.",
+                incidencia.pk, tipo.codigo, accion.nivel_riesgo, accion.descripcion,
+            )
 
         medicion = MedicionTiempo(
             incidencia=incidencia, t_deteccion_sensor=t_deteccion_sensor, t_recepcion_servidor=t_recepcion_servidor,
@@ -160,6 +267,7 @@ class IncidenciaService:
 
         NotificadorTiempoReal.incidencia_actualizada({
             "id": incidencia.pk, "estado": incidencia.estado, "alerta": alerta_estado,
+            "accion": accion.descripcion,
             "tiempo_total_ms": medicion.tiempo_respuesta_total_ms,
         })
 
@@ -167,6 +275,17 @@ class IncidenciaService:
             self._agregar_direccion_aproximada(incidencia)
 
         return incidencia
+
+    @staticmethod
+    def _debe_alertar(accion, resultado_yolo) -> bool:
+        """Manda el catálogo (``nivel_riesgo``); BAJO nunca alerta.
+
+        ``TELEGRAM_ALERTAR_SIN_PERSONA=False`` sigue valiendo como filtro
+        adicional para los tipos que sí alertarían.
+        """
+        if not accion.alertar:
+            return False
+        return config.telegram.enviar_sin_persona or resultado_yolo.hay_persona
 
     def _agregar_direccion_aproximada(self, incidencia: Incidencia) -> None:
         try:
@@ -182,11 +301,12 @@ class IncidenciaService:
         return f"evt_{fecha_hora:%Y%m%d_%H%M%S}_{fecha_hora.microsecond // 1000:03d}_{codigo}.jpg"
 
     @staticmethod
-    def _notificar_nueva(incidencia: Incidencia, resultado_yolo: ResultadoDeteccion) -> None:
+    def _notificar_nueva(incidencia: Incidencia, resultado_yolo: ResultadoDeteccion, accion) -> None:
         NotificadorTiempoReal.incidencia_nueva({
             "id": incidencia.pk, "tipo": incidencia.tipo.codigo, "nombre_tipo": incidencia.tipo.nombre,
             "riesgo": incidencia.tipo.nivel_riesgo, "placa": incidencia.dispositivo.vehiculo.placa,
             "fecha_hora": incidencia.fecha_hora.isoformat(),
+            "accion": accion.descripcion,
             "miniatura": (
                 incidencia.imagen_anotada.url if incidencia.imagen_anotada
                 else (incidencia.imagen.url if incidencia.imagen else None)

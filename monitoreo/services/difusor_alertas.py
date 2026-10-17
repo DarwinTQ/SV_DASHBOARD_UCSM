@@ -54,16 +54,29 @@ class DifusorAlertas:
         self._formateador = FormateadorMensajes()
         self._teclados = FabricaTeclados()
 
-    def difundir(self, incidencia: Incidencia, resultado_yolo=None) -> ResultadoDifusion:
+    def difundir(self, incidencia: Incidencia, resultado_yolo=None, silenciosa: bool = False,
+                 evidencia: Optional[dict] = None) -> ResultadoDifusion:
+        """Difunde la alerta de una incidencia.
+
+        :param silenciosa: ``True`` para los tipos de riesgo MEDIO
+            (``GOLPE_MANIPULACION``): el mensaje llega igual, pero con
+            ``disable_notification`` para no despertar a nadie (sección 5.4).
+        :param evidencia: bloque ``evidencia`` del evento; se resume en el texto.
+        """
         destinatarios = self._destinatarios(incidencia)
         if not destinatarios:
             logger.warning("Incidencia #%s sin destinatarios de Telegram configurados.", incidencia.pk)
             return ResultadoDifusion()
 
-        mensaje = self._formateador.alerta_incidencia(incidencia, resultado_yolo)
+        mensaje = self._formateador.alerta_incidencia(
+            incidencia, resultado_yolo, evidencia=evidencia, silenciosa=silenciosa,
+        )
         alertas = []
         with ThreadPoolExecutor(max_workers=self._max_hilos) as pool:
-            futuros = [pool.submit(self._enviar_a_uno, incidencia, destinatario, mensaje) for destinatario in destinatarios]
+            futuros = [
+                pool.submit(self._enviar_a_uno, incidencia, destinatario, mensaje, silenciosa)
+                for destinatario in destinatarios
+            ]
             for futuro in as_completed(futuros):
                 try:
                     alertas.append(futuro.result())
@@ -104,7 +117,8 @@ class DifusorAlertas:
                 ))
         return resultado
 
-    def _enviar_a_uno(self, incidencia: Incidencia, destinatario: Destinatario, mensaje: str) -> AlertaTelegram:
+    def _enviar_a_uno(self, incidencia: Incidencia, destinatario: Destinatario, mensaje: str,
+                      silenciosa: bool = False) -> AlertaTelegram:
         conductor = incidencia.dispositivo.vehiculo.conductor
         imagen_campo = incidencia.imagen_anotada or incidencia.imagen
         with _LOCK_ESCRITURA_BD:
@@ -123,10 +137,11 @@ class DifusorAlertas:
             return alerta
 
         teclado = self._teclados.alerta(incidencia, destinatario.puede_controlar)
-        self._enviar_con_reintentos(alerta, imagen_campo, mensaje, teclado)
+        self._enviar_con_reintentos(alerta, imagen_campo, mensaje, teclado, silenciosa)
         return alerta
 
-    def _enviar_con_reintentos(self, alerta: AlertaTelegram, imagen_campo, mensaje: str, teclado: dict) -> None:
+    def _enviar_con_reintentos(self, alerta: AlertaTelegram, imagen_campo, mensaje: str, teclado: dict,
+                               silenciosa: bool = False) -> None:
         for intento in range(1, config.telegram.reintentos + 1):
             alerta.intentos = intento
             # El envío HTTP (lo lento) queda fuera del lock: solo se serializan
@@ -134,9 +149,14 @@ class DifusorAlertas:
             # entre destinatarios y evitar "database table is locked".
             if imagen_campo:
                 with imagen_campo.open("rb") as archivo:
-                    resp = self._cliente.send_photo(alerta.chat_id, archivo.read(), caption=mensaje, reply_markup=teclado)
+                    resp = self._cliente.send_photo(
+                        alerta.chat_id, archivo.read(), caption=mensaje, reply_markup=teclado,
+                        disable_notification=silenciosa,
+                    )
             else:
-                resp = self._cliente.send_message(alerta.chat_id, mensaje, reply_markup=teclado)
+                resp = self._cliente.send_message(
+                    alerta.chat_id, mensaje, reply_markup=teclado, disable_notification=silenciosa,
+                )
 
             alerta.codigo_http = resp.get("_status_code")
             if resp.get("ok"):

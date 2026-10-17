@@ -92,11 +92,88 @@ class Esp32Config:
 @dataclass(frozen=True)
 class Esp32CamConfig:
     urls_por_dispositivo: dict
+    urls_stream_por_dispositivo: dict
     api_key: str
     timeout_s: float
     usar_flash_noche: bool
     simulada: bool
     intervalo_status_s: int
+    fps_max: int
+
+
+@dataclass(frozen=True)
+class MqttConfig:
+    """Broker Mosquitto local (sección 2: contrato de tópicos ``ucsm/v1/<codigo>``)."""
+
+    host: str
+    puerto: int
+    usuario: str
+    clave: str
+    prefijo: str
+    keepalive: int
+    client_id: str
+    registrar_gps_csv: bool
+
+    def topico(self, codigo: str, sufijo: str) -> str:
+        return f"{self.prefijo}/{codigo}/{sufijo}"
+
+    def comodin(self, sufijo: str) -> str:
+        """Suscripción a un sufijo para TODOS los dispositivos: ``ucsm/v1/+/<sufijo>``."""
+        return f"{self.prefijo}/+/{sufijo}"
+
+    @staticmethod
+    def codigo_de_topico(topico: str) -> str:
+        """``ucsm/v1/NODO-01/cam/estado`` -> ``NODO-01`` (3.er segmento)."""
+        partes = topico.split("/")
+        return partes[2] if len(partes) >= 3 else ""
+
+    @staticmethod
+    def sufijo_de_topico(topico: str) -> str:
+        """``ucsm/v1/NODO-01/cam/estado`` -> ``cam/estado``."""
+        partes = topico.split("/")
+        return "/".join(partes[3:]) if len(partes) >= 4 else ""
+
+
+@dataclass(frozen=True)
+class UmbralesDeteccionConfig:
+    """Umbrales de las reglas definitivas (secciones 3.4 y 3.7).
+
+    Se publican tal cual en ``ucsm/v1/<codigo>/config`` (retenido) para que el
+    nodo use siempre los valores vigentes del servidor.
+    """
+
+    choque_g: float
+    choque_db: float
+    choque_ventana_ms: int
+    golpe_baja_db: float
+    estallido_alta_db: float
+    planitud_min: float
+    estallido_ventana_ms: int
+    estallido_min_ms: int
+    fusion_ms: int
+    vibracion_g: float
+    golpe_sin_estallido_ms: int
+    quieto_g: float
+    quieto_s: int
+    marcha_s: int
+
+    def a_dict(self) -> dict:
+        return {
+            "choque_g": self.choque_g,
+            "choque_db": self.choque_db,
+            "choque_ventana_ms": self.choque_ventana_ms,
+            "golpe_baja_db": self.golpe_baja_db,
+            "estallido_alta_db": self.estallido_alta_db,
+            "planitud_min": self.planitud_min,
+            "estallido_ventana_ms": self.estallido_ventana_ms,
+            "estallido_min_ms": self.estallido_min_ms,
+            "fusion_ms": self.fusion_ms,
+            "vibracion_g": self.vibracion_g,
+            "golpe_sin_estallido_ms": self.golpe_sin_estallido_ms,
+            "quieto_g": self.quieto_g,
+            "quieto_s": self.quieto_s,
+            "marcha_s": self.marcha_s,
+        }
 
 
 @dataclass(frozen=True)
@@ -168,6 +245,16 @@ class ProcesamientoConfig:
     tamano_cola: int
 
 
+@dataclass(frozen=True)
+class StreamCamaraConfig:
+    """``ReceptorStreamCamara`` (sección 5.5): buffer circular del MJPEG."""
+
+    segundos_buffer: float
+    fps_navegador: int
+    timeout_s: float
+    reconexion_s: float
+
+
 def _parsear_urls_camara(crudo: str) -> dict:
     urls: dict[str, str] = {}
     for par in crudo.split(","):
@@ -188,12 +275,15 @@ class Config:
     bd: BaseDatosConfig
     esp32: Esp32Config
     esp32cam: Esp32CamConfig
+    mqtt: MqttConfig
     yolo: YoloConfig
     vision: VisionContinuaConfig
     telegram: TelegramConfig
     maps: GoogleMapsConfig
     umbrales: UmbralesConfig
+    deteccion: UmbralesDeteccionConfig
     procesamiento: ProcesamientoConfig
+    stream: StreamCamaraConfig
 
     @classmethod
     def cargar(cls) -> "Config":
@@ -242,11 +332,24 @@ class Config:
 
         esp32cam = Esp32CamConfig(
             urls_por_dispositivo=_parsear_urls_camara(_env("ESP32CAM_URLS", "")),
+            urls_stream_por_dispositivo=_parsear_urls_camara(_env("ESP32CAM_STREAM_URLS", "")),
             api_key=_env("ESP32CAM_API_KEY", "tesis-ucsm-2026"),
             timeout_s=_env_float("ESP32CAM_TIMEOUT_S", 4.0),
             usar_flash_noche=_env_bool("ESP32CAM_FLASH", False),
             simulada=_env_bool("ESP32CAM_SIMULADA", False),
             intervalo_status_s=_env_int("ESP32CAM_STATUS_S", 30),
+            fps_max=_env_int("ESP32CAM_FPS_MAX", 8),
+        )
+
+        mqtt = MqttConfig(
+            host=_env("MQTT_HOST", "127.0.0.1"),
+            puerto=_env_int("MQTT_PUERTO", 1883),
+            usuario=_env("MQTT_USUARIO", "servidor"),
+            clave=_env("MQTT_CLAVE", ""),
+            prefijo=_env("MQTT_PREFIJO", "ucsm/v1").strip("/"),
+            keepalive=_env_int("MQTT_KEEPALIVE", 15),
+            client_id=_env("MQTT_CLIENT_ID", "servidor-ucsm"),
+            registrar_gps_csv=_env_bool("MQTT_GPS_CSV", False),
         )
 
         yolo = YoloConfig(
@@ -300,9 +403,33 @@ class Config:
             cooldown_s=_env_int("UMBRAL_COOLDOWN_S", 15),
         )
 
+        deteccion = UmbralesDeteccionConfig(
+            choque_g=_env_float("DET_CHOQUE_G", 4.0),
+            choque_db=_env_float("DET_CHOQUE_DB", 112.0),
+            choque_ventana_ms=_env_int("DET_CHOQUE_VENTANA_MS", 500),
+            golpe_baja_db=_env_float("DET_GOLPE_BAJA_DB", 15.0),
+            estallido_alta_db=_env_float("DET_ESTALLIDO_ALTA_DB", 12.0),
+            planitud_min=_env_float("DET_PLANITUD_MIN", 0.3),
+            estallido_ventana_ms=_env_int("DET_ESTALLIDO_VENTANA_MS", 300),
+            estallido_min_ms=_env_int("DET_ESTALLIDO_MIN_MS", 150),
+            fusion_ms=_env_int("DET_FUSION_MS", 500),
+            vibracion_g=_env_float("DET_VIBRACION_G", 0.15),
+            golpe_sin_estallido_ms=_env_int("DET_GOLPE_SIN_ESTALLIDO_MS", 1000),
+            quieto_g=_env_float("DET_QUIETO_G", 0.05),
+            quieto_s=_env_int("DET_QUIETO_S", 300),
+            marcha_s=_env_int("DET_MARCHA_S", 10),
+        )
+
         procesamiento = ProcesamientoConfig(
             hilos_eventos=_env_int("EVENTOS_HILOS", 1),
             tamano_cola=_env_int("EVENTOS_COLA", 50),
+        )
+
+        stream = StreamCamaraConfig(
+            segundos_buffer=_env_float("STREAM_SEGUNDOS_BUFFER", 3.0),
+            fps_navegador=_env_int("STREAM_FPS_NAVEGADOR", 5),
+            timeout_s=_env_float("STREAM_TIMEOUT_S", 8.0),
+            reconexion_s=_env_float("STREAM_RECONEXION_S", 3.0),
         )
 
         return cls(
@@ -311,16 +438,23 @@ class Config:
             bd=bd,
             esp32=esp32,
             esp32cam=esp32cam,
+            mqtt=mqtt,
             yolo=yolo,
             vision=vision,
             telegram=telegram,
             maps=maps,
             umbrales=umbrales,
+            deteccion=deteccion,
             procesamiento=procesamiento,
+            stream=stream,
         )
 
     def url_camara(self, codigo_dispositivo: str) -> Optional[str]:
         return self.esp32cam.urls_por_dispositivo.get(codigo_dispositivo)
+
+    def url_stream_camara(self, codigo_dispositivo: str) -> Optional[str]:
+        """URL del MJPEG continuo (puerto 81) que lee ``ReceptorStreamCamara``."""
+        return self.esp32cam.urls_stream_por_dispositivo.get(codigo_dispositivo)
 
     def resumen_seguro(self) -> dict:
         """Devuelve la configuración agrupada con los secretos enmascarados."""
@@ -339,10 +473,22 @@ class Config:
                 "Timeout fuera de línea (s)": self.esp32.timeout_offline_s,
                 "Intervalo de estado (s)": self.esp32.intervalo_estado_s,
             },
+            "Broker MQTT (Mosquitto)": {
+                "Host": f"{self.mqtt.host}:{self.mqtt.puerto}",
+                "Usuario": self.mqtt.usuario or "(vacío)",
+                "Contraseña": _enmascarar(self.mqtt.clave),
+                "Prefijo de tópicos": f"{self.mqtt.prefijo}/<codigo>/…",
+                "Keepalive (s)": self.mqtt.keepalive,
+                "Client ID": self.mqtt.client_id,
+            },
             "Cámara ESP32-CAM": {
                 "Dispositivos configurados": ", ".join(self.esp32cam.urls_por_dispositivo) or "(ninguno)",
+                "Stream MJPEG (puerto 81)": ", ".join(
+                    f"{codigo}={url}" for codigo, url in self.esp32cam.urls_stream_por_dispositivo.items()
+                ) or "(ninguno)",
                 "API key": _enmascarar(self.esp32cam.api_key),
                 "Timeout (s)": self.esp32cam.timeout_s,
+                "FPS máximo": self.esp32cam.fps_max,
                 "Simulada": self.esp32cam.simulada,
             },
             "YOLO": {
@@ -373,7 +519,8 @@ class Config:
                 "API key": _enmascarar(self.maps.api_key),
                 "Geocodificación inversa": self.maps.geocodificar,
             },
-            "Umbrales enviados al ESP32": self.umbrales.a_dict(),
+            "Umbrales legado (API HTTP de respaldo)": self.umbrales.a_dict(),
+            "Umbrales de detección (publicados en MQTT 'config')": self.deteccion.a_dict(),
         }
 
 

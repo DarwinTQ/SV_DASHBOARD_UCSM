@@ -42,6 +42,8 @@
             </div>
           </div>
           <div class="text-end">
+            {# El modo decide qué reglas están activas en el nodo (sección 3.3). #}
+            <span class="badge-estado" data-campo="modo">—</span>
             <span class="badge-estado" data-campo="armado">{% if dispositivo.armado %}Armado{% else %}Desarmado{% endif %}</span>
             <div class="form-check form-switch d-inline-block ms-2">
               <input class="form-check-input interruptor-armado" type="checkbox" role="switch"
@@ -56,25 +58,22 @@
     </div>
 
     <div class="tarjeta">
-      <h2 class="tarjeta__titulo"><i class="bi bi-camera-video"></i> Cámara en vivo</h2>
-      <img id="frame-camara" src="" alt="Último frame de la cámara" class="img-fluid rounded d-none" style="border:1px solid var(--verde-20);">
-      <p class="text-muted mb-0" id="camara-sin-datos">Esperando el primer frame de la cámara…</p>
+      <h2 class="tarjeta__titulo"><i class="bi bi-camera-video"></i> Cámara en vivo (YOLO)</h2>
+      <img id="frame-camara" src="" alt="Último cuadro anotado por YOLO" class="img-fluid rounded d-none" style="border:1px solid var(--verde-20);">
+      <p class="text-muted mb-0" id="camara-sin-datos">Esperando el primer cuadro del stream…</p>
       <div class="small mt-2 text-muted">
         FPS: <span id="camara-fps">—</span> · Personas: <span id="camara-personas">—</span> ·
-        Latencia de captura: <span id="camara-latencia">—</span> ms
+        Latencia: <span id="camara-latencia">—</span> ms · Fuente: <span id="camara-metodo">—</span>
       </div>
     </div>
   </div>
 
   <div class="col-lg-6">
+    {% include "monitoreo/componentes/_mapa_vivo.html" with prefijo="mapa-panel" codigo=codigo_mapa alto="300px" %}
+
     <div class="tarjeta">
       <h2 class="tarjeta__titulo"><i class="bi bi-graph-up"></i> Telemetría en vivo</h2>
       <canvas id="grafica-telemetria" height="180"></canvas>
-    </div>
-
-    <div class="tarjeta">
-      <h2 class="tarjeta__titulo"><i class="bi bi-geo-alt"></i> Mapa</h2>
-      <div id="mapa-panel" style="height: 260px; border-radius: 10px;"></div>
     </div>
   </div>
 </div>
@@ -113,8 +112,9 @@
 
 {% block extra_js %}
 <script src="{% static 'vendor/chartjs/chart.umd.min.js' %}"></script>
-<script src="{% static 'monitoreo/js/panel.js' %}"></script>
 <script src="{% static 'monitoreo/js/mapa.js' %}"></script>
+<script src="{% static 'monitoreo/js/mapa_vivo.js' %}"></script>
+<script src="{% static 'monitoreo/js/panel.js' %}"></script>
 <script>
   document.addEventListener("DOMContentLoaded", function () {
     new PanelTiempoReal({
@@ -122,6 +122,9 @@
       urlEstado: "{% url 'api_panel_estado' %}",
       googleMapsApiKey: "{{ google_maps_api_key|escapejs }}",
       mapaZoom: {{ mapa_zoom }},
+      codigoMapa: "{{ codigo_mapa|escapejs }}",
+      urlRastro: "{% if codigo_mapa %}{% url 'api_panel_rastro' codigo_mapa %}{% endif %}",
+      urlRastroLimpiar: "{% if codigo_mapa %}{% url 'api_panel_rastro_limpiar' codigo_mapa %}{% endif %}",
     }).iniciar();
   });
 </script>

@@ -1,0 +1,52 @@
+{% comment %}
+Tarjeta "Ubicación en vivo" (sección 5.6), reutilizada por el panel y por la
+página "Mapa en vivo" a pantalla completa.
+
+Parámetros (pásalos con {% include ... with %}):
+  prefijo  prefijo de los ids que lee MapaVehiculoVivo (ej. "mapa-panel")
+  codigo   código del dispositivo (ej. "NODO-01")
+  alto     altura CSS del mapa (ej. "320px" o "calc(100vh - 260px)")
+  titulo   título de la tarjeta (opcional)
+{% endcomment %}
+<div class="tarjeta mapa-vivo">
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+    <h2 class="tarjeta__titulo mb-0">
+      <i class="bi bi-geo-alt-fill"></i> {{ titulo|default:"Ubicación en vivo" }}
+      <span class="mapa-vivo__codigo">{{ codigo }}</span>
+    </h2>
+    <div class="mapa-vivo__acciones">
+      <button type="button" class="btn btn-sm btn-verde-contorno boton-seguir" id="{{ prefijo }}-seguir"
+              aria-pressed="true" title="Centrar el mapa automáticamente en el vehículo">
+        <i class="bi bi-crosshair"></i> Seguir vehículo
+      </button>
+      <button type="button" class="btn btn-sm btn-verde-contorno" id="{{ prefijo }}-ajustar"
+              title="Encuadrar todo el rastro">
+        <i class="bi bi-arrows-angle-expand"></i> Ver rastro
+      </button>
+      <button type="button" class="btn btn-sm btn-verde-contorno" id="{{ prefijo }}-limpiar"
+              title="Borrar la polilínea del recorrido">
+        <i class="bi bi-eraser"></i> Limpiar rastro
+      </button>
+      <a class="btn btn-sm btn-verde" id="{{ prefijo }}-google" href="#" target="_blank" rel="noopener"
+         title="Abrir la última posición en Google Maps">
+        <i class="bi bi-box-arrow-up-right"></i> Abrir en Google Maps
+      </a>
+    </div>
+  </div>
+
+  <div class="mapa-vivo__lienzo" style="height: {{ alto|default:'320px' }};">
+    <div id="{{ prefijo }}" class="mapa-vivo__mapa"></div>
+    <div class="mapa-vivo__aviso d-none" id="{{ prefijo }}-aviso" role="status" aria-live="polite"></div>
+  </div>
+
+  <dl class="mapa-vivo__datos">
+    <div><dt>Coordenadas</dt><dd id="{{ prefijo }}-coordenadas">—</dd></div>
+    <div><dt>Velocidad</dt><dd id="{{ prefijo }}-velocidad">—</dd></div>
+    <div><dt>Rumbo</dt><dd id="{{ prefijo }}-rumbo">—</dd></div>
+    <div><dt>Satélites</dt><dd id="{{ prefijo }}-sats">—</dd></div>
+    <div><dt>HDOP</dt><dd id="{{ prefijo }}-hdop">—</dd></div>
+    <div><dt>Modo</dt><dd id="{{ prefijo }}-modo">—</dd></div>
+    <div><dt>Antigüedad</dt><dd id="{{ prefijo }}-antiguedad">—</dd></div>
+    <div><dt>Puntos del rastro</dt><dd id="{{ prefijo }}-puntos">0</dd></div>
+  </dl>
+</div>

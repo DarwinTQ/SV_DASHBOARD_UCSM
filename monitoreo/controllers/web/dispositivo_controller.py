@@ -10,7 +10,7 @@ from monitoreo.forms import DispositivoForm
 from monitoreo.models import Dispositivo
 from monitoreo.repositories.dispositivo_repository import DispositivoRepository
 from monitoreo.services.camara_service import FabricaCamara
-from monitoreo.services.notificador_tiempo_real import NotificadorTiempoReal
+from monitoreo.services.control_armado_service import ControlArmadoService
 
 from ._base_crud import EliminarProtegidoMixin
 
@@ -61,6 +61,7 @@ class DispositivoDetalleController(LoginRequiredMixin, DetailView):
         contexto["historial_estados"] = repo.historial_estados(self.object)
         contexto["disponibilidad_pct"] = repo.disponibilidad_pct(self.object)
         contexto["url_camara"] = config.url_camara(self.object.codigo)
+        contexto["url_stream_camara"] = config.url_stream_camara(self.object.codigo)
         return contexto
 
 
@@ -72,17 +73,23 @@ class DispositivoDeleteController(EliminarProtegidoMixin, DeleteView):
 
 
 class DispositivoArmarController(LoginRequiredMixin, View):
-    """POST /dispositivos/<id>/armar/ — botón Armar/Desarmar desde la web o el topbar."""
+    """POST /dispositivos/<id>/armar/ — botón Armar/Desarmar desde la web o el topbar.
+
+    El cambio llega al nodo por el tópico MQTT ``config`` (retenido), que es lo
+    que hace ``ControlArmadoService``.
+    """
 
     def post(self, request, pk):
         dispositivo = get_object_or_404(Dispositivo, pk=pk)
         armar = request.POST.get("armado") == "1"
-        dispositivo.estado = "ACTIVO" if armar else "INACTIVO"
-        dispositivo.save(update_fields=["estado"])
-        NotificadorTiempoReal.dispositivo_estado({"codigo": dispositivo.codigo, "armado": dispositivo.armado})
+        resultado = ControlArmadoService().aplicar(dispositivo, armar)
+
         if request.headers.get("x-requested-with") == "XMLHttpRequest":
-            return JsonResponse({"ok": True, "armado": dispositivo.armado})
-        messages.success(request, f"Dispositivo {'armado' if armar else 'desarmado'} correctamente.")
+            return JsonResponse({
+                "ok": True, "armado": resultado.armado,
+                "publicado_mqtt": resultado.publicado_mqtt, "mensaje": resultado.mensaje,
+            })
+        messages.success(request, resultado.mensaje)
         return redirect("monitoreo:dispositivo_detalle", pk=pk)
 
 
