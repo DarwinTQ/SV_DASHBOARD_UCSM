@@ -252,7 +252,8 @@
     const datos = await resp.json();
     if (!datos.ok) { resultado.innerHTML = `<span class="text-danger">${datos.error}</span>`; return; }
     resultado.innerHTML = `
-      <p>Tiempo de inferencia: ${datos.tiempo_inferencia_ms} ms · Detecciones: ${datos.num_detecciones} · ¿Persona? ${datos.hay_persona ? "Sí" : "No"}</p>
+      <p>Tiempo de inferencia: ${datos.tiempo_inferencia_ms} ms · Detecciones: ${datos.num_detecciones} · ¿Generaría alerta? ${datos.hay_alerta ? "Sí" : "No"}</p>
+      <p class="small text-muted">Clases: ${datos.clases}${datos.tipo_evento ? ` · tipo de evento: <strong>${datos.tipo_evento}</strong>` : ""}</p>
       ${datos.imagen_anotada_base64 ? `<img src="data:image/jpeg;base64,${datos.imagen_anotada_base64}" class="img-fluid rounded">` : ""}`;
   });
 </script>

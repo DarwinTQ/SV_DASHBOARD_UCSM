@@ -46,8 +46,9 @@ class ComandoFoto(ComandoBase):
 
         imagen = resultado.imagen_anotada_jpg or captura.jpg
         caption = FormateadorMensajes().pie_foto(
-            dispositivo.codigo, resultado.num_personas, resultado.confianza_max,
+            dispositivo.codigo, resultado.num_detecciones, resultado.confianza_max,
             captura.captura_ms, resultado.tiempo_inferencia_ms, total_ms,
+            resumen_clases=resultado.resumen_clases,
         )
         teclado = self._teclados.foto(dispositivo.pk)
         ctx.cliente.send_photo(ctx.chat_id, imagen, caption=caption, reply_markup=teclado)

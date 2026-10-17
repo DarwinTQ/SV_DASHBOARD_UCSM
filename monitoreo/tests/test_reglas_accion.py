@@ -291,7 +291,7 @@ class PersonaSoloEstacionadoTests(TestCase):
         )
 
         for _ in range(5):
-            vigilancia._evaluar_confirmacion_persona(self.dispositivo, frame)
+            vigilancia._evaluar_confirmaciones(self.dispositivo, frame)
 
         self.assertEqual(Incidencia.objects.count(), 0)
-        self.assertEqual(vigilancia._frames_confirmados["NODO-01"], [])
+        self.assertEqual(vigilancia._frames_confirmados.get(("NODO-01", "person")), None)

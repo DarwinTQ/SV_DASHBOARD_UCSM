@@ -108,18 +108,39 @@ class IncidenciaService:
             evidencia=evento.get("evidencia"),
         )
 
-    def registrar_incidencia_persona(
+    def registrar_incidencia_visual(
         self, dispositivo: Dispositivo, captura: ResultadoCaptura, resultado_yolo: ResultadoDeteccion,
         t_deteccion_sensor, t_recepcion_servidor, t_inicio_inferencia, t_fin_inferencia,
+        tipo_codigo: str = "PERSONA", clase_yolo: Optional[str] = None,
     ) -> Incidencia:
-        """Usado por VigilanciaVisual: la captura y la inferencia ya ocurrieron
-        en el ciclo continuo de YOLO, aquí solo se persiste y se notifica."""
+        """Usado por ``VigilanciaVisual``: la captura y la inferencia ya
+        ocurrieron en el ciclo continuo de YOLO, aquí solo se persiste y se
+        notifica.
+
+        ``tipo_codigo`` viene de ``config.yolo.clases_vigiladas`` (``ARMA_FUEGO``,
+        ``ARMA_BLANCA``, ``APERTURA_PUERTA``, ``VEHICULO_DANADO``,
+        ``PERSONA_SOSPECHOSA``, ``PERSONA``); lo que se haga con él lo decide
+        igual que siempre ``ReglasAccion`` a partir del catálogo.
+        """
+        vigilada = config.yolo.vigilada(clase_yolo) if clase_yolo else None
+        contexto = (
+            "con el vehículo ESTACIONADO y armado" if (vigilada and vigilada.solo_estacionado)
+            else f"en modo {self._modo_actual(dispositivo.codigo) or 'desconocido'}"
+        )
+        detalle = f"clase '{clase_yolo}'" if clase_yolo else "detección visual"
+        confianza = resultado_yolo.confianza_max
+        if confianza is not None:
+            detalle += f" al {confianza:.0%} de confianza"
+        if resultado_yolo.resumen_clases:
+            detalle += f" (detecciones: {resultado_yolo.resumen_clases})"
+
         observaciones = [
-            "Detectado por vigilancia visual continua (YOLO) con el vehículo ESTACIONADO y armado.",
+            f"Detectado por vigilancia visual continua (YOLO): {detalle}, {contexto}, "
+            f"confirmado en {config.vision.frames_confirmacion} cuadro(s) seguido(s).",
             self._nota_imagen(captura),
         ]
         return self._persistir_y_notificar(
-            dispositivo=dispositivo, tipo_codigo="PERSONA", fecha_hora=t_deteccion_sensor,
+            dispositivo=dispositivo, tipo_codigo=tipo_codigo, fecha_hora=t_deteccion_sensor,
             aceleracion_g=None, nivel_audio_db=None, latitud=None, longitud=None,
             captura=captura, resultado_yolo=resultado_yolo,
             observacion=" ".join(p for p in observaciones if p),
@@ -127,6 +148,21 @@ class IncidenciaService:
             t_inicio_inferencia=t_inicio_inferencia, t_fin_inferencia=t_fin_inferencia,
             sin_reloj_sensor=False, nivel_firmware=None, evidencia=None,
         )
+
+    def registrar_incidencia_persona(self, dispositivo: Dispositivo, captura: ResultadoCaptura,
+                                     resultado_yolo: ResultadoDeteccion, **tiempos) -> Incidencia:
+        """Alias histórico de ``registrar_incidencia_visual`` para la clase
+        ``person`` (lo usaba ``VigilanciaVisual`` antes del modelo propio)."""
+        return self.registrar_incidencia_visual(
+            dispositivo=dispositivo, captura=captura, resultado_yolo=resultado_yolo,
+            tipo_codigo="PERSONA", clase_yolo="person", **tiempos,
+        )
+
+    @staticmethod
+    def _modo_actual(codigo: str) -> str:
+        from monitoreo.services.estado_en_vivo import EstadoEnVivo
+
+        return EstadoEnVivo.instancia().modo(codigo)
 
     # ------------------------------------------------------------------ #
     # Armado de la observación
@@ -157,23 +193,33 @@ class IncidenciaService:
         return f"Contexto del nodo: {', '.join(partes)}." if partes else ""
 
     def _tipo_final(self, tipo_original: str, resultado_yolo, evento: dict, observaciones: list) -> str:
-        """YOLO reclasifica a PERSONA cuando ve a alguien junto al vehículo.
+        """YOLO reclasifica el evento según **lo que ve** junto al vehículo.
+
+        Con el modelo propio de la tesis eso puede ser ``ARMA_FUEGO``,
+        ``ARMA_BLANCA``, ``APERTURA_PUERTA``, ``VEHICULO_DANADO`` o
+        ``PERSONA_SOSPECHOSA``; con el modelo genérico, ``PERSONA``. Se toma la
+        detección de mayor confianza.
 
         Un CHOQUE no se reclasifica: es una emergencia por sí mismo y perdería
-        su evidencia; en los demás casos ver a una persona es más informativo
+        su evidencia; en los demás casos lo que ve la cámara es más informativo
         que el disparo del sensor.
         """
-        if not resultado_yolo.hay_persona:
+        tipo_visual = resultado_yolo.tipo_evento_principal
+        if tipo_visual is None:
             return tipo_original
         if tipo_original == "CHOQUE":
             observaciones.append(
-                f"YOLO además detectó {resultado_yolo.num_personas} persona(s) en la escena."
+                f"YOLO además detectó {resultado_yolo.num_detecciones} objeto(s) en la escena"
+                f"{f': {resultado_yolo.resumen_clases}' if resultado_yolo.resumen_clases else ''}."
             )
             return tipo_original
 
         detalle = self._detalle_disparo(tipo_original, evento)
         observaciones.append(f"Disparado por sensor: {tipo_original}{detalle}.")
-        return "PERSONA"
+        observaciones.append(
+            f"Reclasificado a {tipo_visual} por YOLO ({resultado_yolo.resumen_clases})."
+        )
+        return tipo_visual
 
     @staticmethod
     def _detalle_disparo(tipo_original: str, evento: dict) -> str:
@@ -207,7 +253,7 @@ class IncidenciaService:
         t_deteccion_sensor, t_recepcion_servidor, t_inicio_inferencia, t_fin_inferencia,
         sin_reloj_sensor, nivel_firmware=None, evidencia=None,
     ) -> Incidencia:
-        tipo = TipoEvento.objects.get(codigo=tipo_codigo)
+        tipo = self._obtener_tipo(tipo_codigo)
         accion = ReglasAccion.para(tipo)
         nota_nivel = ReglasAccion.validar_nivel_firmware(tipo, nivel_firmware)
         observacion = " ".join(p for p in (observacion, nota_nivel) if p).strip()
@@ -281,11 +327,13 @@ class IncidenciaService:
         """Manda el catálogo (``nivel_riesgo``); BAJO nunca alerta.
 
         ``TELEGRAM_ALERTAR_SIN_PERSONA=False`` sigue valiendo como filtro
-        adicional para los tipos que sí alertarían.
+        adicional para los tipos que sí alertarían: en ese caso se exige que
+        YOLO haya confirmado **algo** vigilado (un arma, una puerta abierta,
+        daño, una persona), no solo la clase ``person``.
         """
         if not accion.alertar:
             return False
-        return config.telegram.enviar_sin_persona or resultado_yolo.hay_persona
+        return config.telegram.enviar_sin_persona or resultado_yolo.hay_alerta
 
     def _agregar_direccion_aproximada(self, incidencia: Incidencia) -> None:
         try:
@@ -295,6 +343,37 @@ class IncidenciaService:
                 incidencia.save(update_fields=["observacion"])
         except Exception:
             logger.exception("Falló la geocodificación inversa (no crítico).")
+
+    @staticmethod
+    def _obtener_tipo(tipo_codigo: str) -> TipoEvento:
+        """El ``TipoEvento`` del catálogo, sembrándolo si falta.
+
+        Si el catálogo no se ha vuelto a sembrar después de cambiar de modelo,
+        los tipos de las clases nuevas no existen y antes esto reventaba con
+        ``DoesNotExist`` dentro del hilo de la vigilancia: la incidencia se
+        perdía en silencio y nunca salía la alerta. Se crea con el nivel de
+        riesgo del catálogo de ``config.py`` y se avisa en el log; cambiar el
+        nivel después desde la página "Tipos de evento" sigue mandando.
+        """
+        tipo = TipoEvento.objects.filter(codigo=tipo_codigo).first()
+        if tipo is not None:
+            return tipo
+
+        vigilada = next(
+            (v for v in config.yolo.clases_vigiladas if v.tipo_evento == tipo_codigo), None,
+        )
+        tipo = TipoEvento.objects.create(
+            codigo=tipo_codigo,
+            nombre=vigilada.nombre if vigilada else tipo_codigo.replace("_", " ").capitalize(),
+            nivel_riesgo=vigilada.nivel_riesgo if vigilada else "ALTO",
+            descripcion=vigilada.descripcion if vigilada else "",
+        )
+        logger.warning(
+            "El tipo de evento '%s' no estaba en el catálogo; se creó con riesgo %s. "
+            "Ejecuta 'python manage.py sembrar_catalogos' para dejarlo sembrado.",
+            tipo_codigo, tipo.nivel_riesgo,
+        )
+        return tipo
 
     @staticmethod
     def _nombre_archivo(fecha_hora, codigo: str) -> str:
@@ -313,5 +392,6 @@ class IncidenciaService:
             ),
             "lat": float(incidencia.latitud) if incidencia.latitud is not None else None,
             "lon": float(incidencia.longitud) if incidencia.longitud is not None else None,
-            "personas": resultado_yolo.num_personas, "confianza_max": resultado_yolo.confianza_max,
+            "personas": resultado_yolo.num_detecciones, "confianza_max": resultado_yolo.confianza_max,
+            "clases": resultado_yolo.clases_detectadas,
         })

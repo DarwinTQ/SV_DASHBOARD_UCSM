@@ -122,12 +122,16 @@ class FormateadorMensajes:
         bateria = telemetria.get("bateria") or {}
         return f"🔋 Voltaje: {bateria.get('v', '—')} V\n🔋 Porcentaje: {bateria.get('pct', '—')} %"
 
-    def pie_foto(self, codigo: str, num_personas: int, confianza_max, captura_ms, inferencia_ms, total_ms) -> str:
+    def pie_foto(self, codigo: str, num_detecciones: int, confianza_max, captura_ms, inferencia_ms,
+                 total_ms, resumen_clases: str = "") -> str:
         lineas = [f"📷 <b>{codigo}</b> · {_fh(timezone.now())}"]
         if confianza_max:
-            lineas.append(f"👤 {num_personas} persona(s) · confianza máx. {confianza_max:.0%}")
+            detalle = f"🔍 {num_detecciones} detección(es) · confianza máx. {confianza_max:.0%}"
+            if resumen_clases:
+                detalle += f"\n⚠️ {resumen_clases}"
+            lineas.append(detalle)
         else:
-            lineas.append("👤 Sin personas detectadas")
+            lineas.append("🔍 Sin detecciones")
         lineas.append(f"⏱️ Captura {captura_ms or 0:.0f} ms · Inferencia {inferencia_ms or 0:.0f} ms · Total {total_ms:.0f} ms")
         return "\n".join(lineas)
 
@@ -161,8 +165,15 @@ class FormateadorMensajes:
         ]
         detalle_tiempo = f"🕒 {_fh(incidencia.fecha_hora)}"
         if resultado_yolo is not None and getattr(resultado_yolo, "confianza_max", None):
-            detalle_tiempo += f" · 📈 {resultado_yolo.confianza_max:.0%} · {resultado_yolo.num_personas} persona(s)"
+            detalle_tiempo += (
+                f" · 📈 {resultado_yolo.confianza_max:.0%} · "
+                f"{resultado_yolo.num_detecciones} detección(es)"
+            )
         lineas.append(detalle_tiempo)
+
+        resumen_clases = getattr(resultado_yolo, "resumen_clases", "") if resultado_yolo else ""
+        if resumen_clases:
+            lineas.append(f"👁️ YOLO: {resumen_clases}")
 
         resumen = DescriptorEvidencia.resumen_corto(incidencia.tipo.codigo, evidencia)
         if resumen:

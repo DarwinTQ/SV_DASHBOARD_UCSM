@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 import secrets
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Optional
 
@@ -177,6 +177,68 @@ class UmbralesDeteccionConfig:
 
 
 @dataclass(frozen=True)
+class ClaseVigilada:
+    """Una clase del modelo YOLO y qué hace el servidor cuando la ve.
+
+    Es el puente entre el nombre que devuelve el modelo (``model.names``) y el
+    catálogo ``tipo_evento`` de la base de datos: sin esta correspondencia una
+    detección no tiene ``TipoEvento``, y sin ``TipoEvento`` ``ReglasAccion`` no
+    puede decidir nada y la incidencia nunca llega a Telegram.
+
+    ``nivel_riesgo`` solo se usa al **sembrar** el catálogo; a partir de ahí
+    manda la base de datos (editable desde la página "Tipos de evento"), igual
+    que con los eventos del firmware.
+    """
+
+    clase: str                      # nombre exacto en model.names
+    tipo_evento: str                # codigo de TipoEvento (máx. 20 caracteres)
+    nombre: str                     # nombre legible para el catálogo
+    nivel_riesgo: str               # ALTO / MEDIO / BAJO para la siembra inicial
+    confianza_alerta: float         # umbral propio de esta clase
+    solo_estacionado: bool          # True = solo alerta si está ESTACIONADO y armado
+    descripcion: str = ""
+
+
+# Catálogo de clases del modelo de la tesis (modelos_ia/yolo26_ucsm_best.pt).
+# Los umbrales y la restricción de modo se pueden ajustar desde .env con
+# YOLO_CONFIANZA_POR_CLASE y YOLO_CLASES_SOLO_ESTACIONADO.
+CATALOGO_CLASES_YOLO = (
+    ClaseVigilada(
+        clase="arma_fuego", tipo_evento="ARMA_FUEGO", nombre="Arma de fuego detectada (YOLO)",
+        nivel_riesgo="ALTO", confianza_alerta=0.50, solo_estacionado=False,
+        descripcion="YOLO detectó un arma de fuego en la escena del vehículo",
+    ),
+    ClaseVigilada(
+        clase="arma_blanca", tipo_evento="ARMA_BLANCA", nombre="Arma blanca detectada (YOLO)",
+        nivel_riesgo="ALTO", confianza_alerta=0.50, solo_estacionado=False,
+        descripcion="YOLO detectó un arma blanca (cuchillo, desarmador) en la escena",
+    ),
+    ClaseVigilada(
+        clase="abriendo_puerta", tipo_evento="APERTURA_PUERTA", nombre="Apertura de puerta (YOLO)",
+        nivel_riesgo="ALTO", confianza_alerta=0.55, solo_estacionado=False,
+        descripcion="YOLO detectó a alguien manipulando/abriendo una puerta del vehículo",
+    ),
+    ClaseVigilada(
+        clase="car broken", tipo_evento="VEHICULO_DANADO", nombre="Vehículo dañado (YOLO)",
+        nivel_riesgo="ALTO", confianza_alerta=0.55, solo_estacionado=False,
+        descripcion="YOLO detectó daño visible en el vehículo (vidrio roto, abolladura)",
+    ),
+    ClaseVigilada(
+        clase="suspicious", tipo_evento="PERSONA_SOSPECHOSA", nombre="Persona sospechosa (YOLO)",
+        nivel_riesgo="ALTO", confianza_alerta=0.60, solo_estacionado=False,
+        descripcion="YOLO detectó una actitud sospechosa junto al vehículo",
+    ),
+    # 'person' es la clase del modelo genérico (yolo26n.pt) y mantiene la regla
+    # de la sección 5.4: solo alerta con el vehículo ESTACIONADO y armado.
+    ClaseVigilada(
+        clase="person", tipo_evento="PERSONA", nombre="Persona detectada (YOLO)",
+        nivel_riesgo="ALTO", confianza_alerta=0.60, solo_estacionado=True,
+        descripcion="YOLO detectó una persona junto al vehículo",
+    ),
+)
+
+
+@dataclass(frozen=True)
 class YoloConfig:
     ruta_modelo: Path
     nombre_modelo: str
@@ -185,6 +247,22 @@ class YoloConfig:
     clases_objetivo: tuple
     tamano_imagen: int
     dispositivo: str
+    clases_vigiladas: tuple = field(default_factory=tuple)
+
+    def vigilada(self, clase: str) -> Optional[ClaseVigilada]:
+        """La configuración de una clase del modelo, o ``None`` si no se vigila."""
+        for vigilada in self.clases_vigiladas:
+            if vigilada.clase == clase:
+                return vigilada
+        return None
+
+    def umbral_alerta(self, clase: str) -> float:
+        vigilada = self.vigilada(clase)
+        return vigilada.confianza_alerta if vigilada else self.confianza_alerta
+
+    def tipo_evento_de(self, clase: str) -> Optional[str]:
+        vigilada = self.vigilada(clase)
+        return vigilada.tipo_evento if vigilada else None
 
 
 @dataclass(frozen=True)
@@ -266,6 +344,58 @@ def _parsear_urls_camara(crudo: str) -> dict:
     return urls
 
 
+def _parsear_pares(crudo: str) -> dict:
+    """``"clase=0.5,otra clase=0.6"`` -> ``{"clase": "0.5", "otra clase": "0.6"}``."""
+    pares: dict[str, str] = {}
+    for par in crudo.split(","):
+        par = par.strip()
+        if not par or "=" not in par:
+            continue
+        clave, valor = par.split("=", 1)
+        pares[clave.strip()] = valor.strip()
+    return pares
+
+
+def _construir_clases_vigiladas(confianza_alerta_global: float, umbrales_raw: str,
+                                solo_estacionado_raw: str) -> tuple:
+    """Aplica al catálogo de clases los ajustes de ``.env``.
+
+    * ``YOLO_CONFIANZA_POR_CLASE=arma_fuego=0.45,suspicious=0.7`` cambia el
+      umbral de alerta de una clase concreta (lo demás queda igual).
+    * ``YOLO_CLASES_SOLO_ESTACIONADO=person,suspicious`` lista las clases que
+      solo alertan con el vehículo ESTACIONADO y armado; las que no aparecen
+      alertan siempre (un arma es una emergencia también en marcha).
+    """
+    umbrales = _parsear_pares(umbrales_raw)
+    restringidas = {c.strip() for c in solo_estacionado_raw.split(",") if c.strip()}
+
+    conocidas = {v.clase for v in CATALOGO_CLASES_YOLO}
+    for clase in list(umbrales) + list(restringidas):
+        if clase not in conocidas:
+            logger.warning(
+                "La clase YOLO %r no está en CATALOGO_CLASES_YOLO (config.py); se ignora.", clase,
+            )
+
+    resultado = []
+    for vigilada in CATALOGO_CLASES_YOLO:
+        umbral = vigilada.confianza_alerta
+        if vigilada.clase in umbrales:
+            try:
+                umbral = float(umbrales[vigilada.clase])
+            except ValueError:
+                logger.warning(
+                    "Umbral inválido en YOLO_CONFIANZA_POR_CLASE para %r: %r; se usa %s.",
+                    vigilada.clase, umbrales[vigilada.clase], umbral,
+                )
+        elif vigilada.clase == "person":
+            # 'person' sigue atada al umbral global por compatibilidad (v2.0.0).
+            umbral = confianza_alerta_global
+        resultado.append(
+            replace(vigilada, confianza_alerta=umbral, solo_estacionado=vigilada.clase in restringidas)
+        )
+    return tuple(resultado)
+
+
 @dataclass
 class Config:
     """Instancia única de configuración (patrón singleton por módulo)."""
@@ -309,6 +439,11 @@ class Config:
 
         clases_raw = _env("YOLO_CLASES", "person")
         clases_objetivo = tuple(c.strip() for c in clases_raw.split(",") if c.strip())
+        clases_vigiladas = _construir_clases_vigiladas(
+            confianza_alerta_global=_env_float("YOLO_CONFIANZA_ALERTA", 0.60),
+            umbrales_raw=_env("YOLO_CONFIANZA_POR_CLASE", ""),
+            solo_estacionado_raw=_env("YOLO_CLASES_SOLO_ESTACIONADO", "person"),
+        )
 
         servidor = ServidorConfig(
             host=_env("SERVIDOR_HOST", "0.0.0.0"),
@@ -360,6 +495,7 @@ class Config:
             clases_objetivo=clases_objetivo,
             tamano_imagen=_env_int("YOLO_IMGSZ", 640),
             dispositivo=_env("YOLO_DEVICE", "cpu"),
+            clases_vigiladas=clases_vigiladas,
         )
 
         vision = VisionContinuaConfig(
@@ -497,6 +633,14 @@ class Config:
                 "Confianza mínima": self.yolo.confianza_minima,
                 "Confianza de alerta": self.yolo.confianza_alerta,
                 "Dispositivo de inferencia": self.yolo.dispositivo,
+                "Clases que pide al modelo": ", ".join(self.yolo.clases_objetivo) or "(todas)",
+            },
+            "Clases que generan incidencia": {
+                f"{v.clase} → {v.tipo_evento}": (
+                    f"confianza ≥ {v.confianza_alerta:.0%} · "
+                    + ("solo ESTACIONADO y armado" if v.solo_estacionado else "alerta en cualquier modo")
+                )
+                for v in self.yolo.clases_vigiladas
             },
             "Visión continua": {
                 "Activa": self.vision.activa,

@@ -7,6 +7,7 @@ ejemplo y el superusuario admin/admin123 para poder probar sin hardware.
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 
+from config import config
 from monitoreo.models import Conductor, Dispositivo, TipoEvento, Vehiculo
 
 
@@ -98,11 +99,38 @@ class SembradorCatalogos:
     def __init__(self, stdout_write):
         self._escribir = stdout_write
 
+    @staticmethod
+    def tipos_de_clases_yolo() -> list:
+        """Los tipos de las clases del modelo de visión.
+
+        Se derivan de ``config.yolo.clases_vigiladas`` para que el catálogo de
+        la base de datos y lo que reconoce el detector no puedan desincronizarse:
+        una clase sin ``TipoEvento`` nunca llegaría a generar una alerta.
+        """
+        return [
+            {
+                "codigo": v.tipo_evento,
+                "nombre": v.nombre,
+                "nivel_riesgo": v.nivel_riesgo,
+                "descripcion": v.descripcion,
+            }
+            for v in config.yolo.clases_vigiladas
+        ]
+
+    def _catalogo_completo(self) -> list:
+        """Catálogo fijo + tipos de visión, sin repetir códigos (PERSONA está en ambos)."""
+        completo = [dict(d) for d in self.CATALOGO_TIPOS_EVENTO]
+        codigos = {d["codigo"] for d in completo}
+        for datos in self.tipos_de_clases_yolo():
+            if datos["codigo"] not in codigos:
+                completo.append(datos)
+                codigos.add(datos["codigo"])
+        return completo
+
     def sembrar_tipos_evento(self) -> None:
-        for datos in self.CATALOGO_TIPOS_EVENTO:
+        for datos in self._catalogo_completo():
             codigo = datos.pop("codigo")
             _, creado = TipoEvento.objects.update_or_create(codigo=codigo, defaults=datos)
-            datos["codigo"] = codigo
             accion = "creado" if creado else "actualizado"
             self._escribir(f"  · Tipo de evento {codigo}: {accion}")
 

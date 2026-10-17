@@ -10,6 +10,14 @@ Cambios de la v3.0.0 (sección 5.4 y 5.5):
   un falso positivo. El vídeo se sigue mostrando y anotando igual, sin alertar.
 * los cuadros anotados se envían al navegador por WebSocket (binario, a lo sumo
   ``STREAM_FPS_NAVEGADOR``), solo si hay alguien mirando el panel.
+
+Cambio del modelo propio de la tesis: la confirmación ya no es solo de
+``person``. Se lleva una **racha y un cooldown independientes por clase**
+(``arma_fuego``, ``arma_blanca``, ``abriendo_puerta``, ``car broken``,
+``suspicious``, ``person``), cada una con su umbral de confianza y su
+``TipoEvento``, según ``config.yolo.clases_vigiladas``. La restricción de
+"solo ESTACIONADO y armado" se aplica **por clase**: un arma es una emergencia
+también con el vehículo en marcha, una persona no.
 """
 from __future__ import annotations
 
@@ -44,15 +52,19 @@ class VigilanciaVisual(WorkerBase):
 
     nombre = "VigilanciaVisual"
 
-    def __init__(self, proveedor_cuadros=None):
+    def __init__(self, proveedor_cuadros=None, incidencia_service=None):
         super().__init__()
         self._estado_en_vivo = EstadoEnVivo.instancia()
         self._proveedor = proveedor_cuadros or ProveedorCuadros()
+        # Inyectable para las pruebas (así no se construye un DifusorAlertas
+        # real, que hablaría con la API de Telegram de verdad).
+        self._incidencias = incidencia_service
         self._fps_historial: dict[str, deque] = defaultdict(lambda: deque(maxlen=20))
-        self._frames_confirmados: dict[str, list] = defaultdict(list)
-        self._ultima_incidencia_persona: dict[str, float] = {}
+        # Racha y cooldown por (codigo de dispositivo, clase de YOLO).
+        self._frames_confirmados: dict[tuple, list] = defaultdict(list)
+        self._ultima_incidencia: dict[tuple, float] = {}
         self._ultimo_envio_navegador: dict[str, float] = {}
-        self._aviso_modo_emitido: dict[str, float] = {}
+        self._aviso_modo_emitido: dict[tuple, float] = {}
 
     def ciclo(self) -> None:
         if not config.vision.activa:
@@ -92,7 +104,7 @@ class VigilanciaVisual(WorkerBase):
         self._guardar_frame_en_vivo(codigo, captura, resultado, fps, captura.captura_ms)
 
         frame = FrameProcesado(t_solicitud, t_frame, t_inicio_inferencia, t_fin_inferencia, captura, resultado)
-        self._evaluar_confirmacion_persona(dispositivo, frame)
+        self._evaluar_confirmaciones(dispositivo, frame)
 
     def _actualizar_fps(self, codigo: str, latencia_ms) -> float | None:
         """FPS reales del ciclo de visión (captura + inferencia), no de la cámara."""
@@ -106,13 +118,14 @@ class VigilanciaVisual(WorkerBase):
         imagen = resultado.imagen_anotada_jpg or captura.jpg
         if imagen is None:
             return
+        detecciones = resultado.num_detecciones
 
         carpeta_live = config.bd.media_root / "live"
         carpeta_live.mkdir(parents=True, exist_ok=True)
         (carpeta_live / f"{codigo}.jpg").write_bytes(imagen)
 
         url = f"/media/live/{codigo}.jpg?ts={RelojServidor.ahora_ms()}"
-        self._estado_en_vivo.actualizar_frame(codigo, url, fps or 0, resultado.num_personas, latencia_captura_ms or 0)
+        self._estado_en_vivo.actualizar_frame(codigo, url, fps or 0, detecciones, latencia_captura_ms or 0)
 
         # Tope de FPS hacia el navegador: el ciclo de visión puede ir más rápido
         # que lo que tiene sentido empujar por el WebSocket.
@@ -124,16 +137,26 @@ class VigilanciaVisual(WorkerBase):
 
         NotificadorTiempoReal.frame({
             "codigo": codigo, "url": url, "fps": fps,
-            "personas": resultado.num_personas, "latencia_captura_ms": latencia_captura_ms,
+            "personas": detecciones, "latencia_captura_ms": latencia_captura_ms,
+            "clases": resultado.clases_detectadas, "resumen_clases": resultado.resumen_clases,
             "metodo": captura.metodo, "modo": self._estado_en_vivo.modo(codigo),
             "bytes": len(imagen),
         })
 
     # ------------------------------------------------------------------ #
-    # PERSONA: solo estacionado y armado
+    # Confirmación por clase
     # ------------------------------------------------------------------ #
-    def _puede_alertar_persona(self, dispositivo: Dispositivo) -> bool:
-        """En marcha siempre hay personas dentro del auto (sección 5.4)."""
+    def _puede_alertar(self, dispositivo: Dispositivo, vigilada) -> bool:
+        """¿Se puede alertar esta clase con el estado actual del vehículo?
+
+        Las clases con ``solo_estacionado=False`` (armas, daño al vehículo)
+        alertan siempre: son una emergencia en cualquier modo y no depender del
+        armado evita quedarse callado justo cuando importa. ``person`` conserva
+        la regla de la sección 5.4 (en marcha siempre hay gente dentro).
+        """
+        if not vigilada.solo_estacionado:
+            return True
+
         if not dispositivo.armado:
             return False
         modo = self._estado_en_vivo.modo(dispositivo.codigo)
@@ -142,41 +165,66 @@ class VigilanciaVisual(WorkerBase):
 
         # Sin modo todavía (el nodo no publicó 'modo') se es conservador y no se
         # alerta, pero se avisa en el log como máximo una vez por minuto.
+        clave = (dispositivo.codigo, vigilada.clase)
         ahora = time.monotonic()
-        if ahora - self._aviso_modo_emitido.get(dispositivo.codigo, 0.0) > 60:
-            self._aviso_modo_emitido[dispositivo.codigo] = ahora
+        if ahora - self._aviso_modo_emitido.get(clave, 0.0) > 60:
+            self._aviso_modo_emitido[clave] = ahora
             self.logger.info(
-                "PERSONA no se alerta en %s: modo = %s (solo se alerta ESTACIONADO y armado).",
-                dispositivo.codigo, modo or "desconocido",
+                "%s no se alerta en %s: modo = %s (esta clase solo alerta ESTACIONADO y armado).",
+                vigilada.tipo_evento, dispositivo.codigo, modo or "desconocido",
             )
         return False
 
-    def _evaluar_confirmacion_persona(self, dispositivo: Dispositivo, frame: FrameProcesado) -> None:
+    def _puede_alertar_persona(self, dispositivo: Dispositivo) -> bool:
+        """Atajo histórico para la clase ``person`` (sección 5.4)."""
+        vigilada = config.yolo.vigilada("person")
+        return bool(vigilada) and self._puede_alertar(dispositivo, vigilada)
+
+    def _evaluar_confirmaciones(self, dispositivo: Dispositivo, frame: FrameProcesado) -> None:
+        """Una racha por clase: ``arma_fuego`` y ``suspicious`` se cuentan por
+        separado, así una no "roba" los frames de confirmación de la otra."""
         codigo = dispositivo.codigo
-        confirmados = self._frames_confirmados[codigo]
+        presentes: set[str] = set()
 
-        if not frame.resultado.hay_persona:
-            confirmados.clear()
-            return
+        for clase in frame.resultado.clases_detectadas:
+            vigilada = config.yolo.vigilada(clase)
+            if vigilada is None or not self._puede_alertar(dispositivo, vigilada):
+                continue
+            presentes.add(clase)
+            self._frames_confirmados[(codigo, clase)].append(frame)
 
-        if not self._puede_alertar_persona(dispositivo):
-            confirmados.clear()
-            return
+        # Lo que dejó de verse (o ya no puede alertar) pierde su racha: nada de
+        # alertas acumuladas de hace diez segundos.
+        for clave in [c for c in self._frames_confirmados if c[0] == codigo and c[1] not in presentes]:
+            self._frames_confirmados.pop(clave, None)
 
-        confirmados.append(frame)
+        for clase in presentes:
+            self._intentar_incidencia(dispositivo, clase)
+
+    def _servicio_incidencias(self) -> IncidenciaService:
+        """Se crea perezosamente: construirlo en ``__init__`` levantaría el
+        cliente de Telegram antes de que ``main.py`` termine de arrancar."""
+        if self._incidencias is None:
+            self._incidencias = IncidenciaService()
+        return self._incidencias
+
+    def _intentar_incidencia(self, dispositivo: Dispositivo, clase: str) -> None:
+        clave = (dispositivo.codigo, clase)
+        confirmados = self._frames_confirmados[clave]
         if len(confirmados) < config.vision.frames_confirmacion:
             return
 
-        ultima = self._ultima_incidencia_persona.get(codigo, 0)
-        if time.time() - ultima < config.vision.cooldown_s:
+        if time.time() - self._ultima_incidencia.get(clave, 0) < config.vision.cooldown_s:
             confirmados.clear()
             return
 
+        vigilada = config.yolo.vigilada(clase)
         primero = confirmados[0]
-        IncidenciaService().registrar_incidencia_persona(
+        self._servicio_incidencias().registrar_incidencia_visual(
             dispositivo=dispositivo, captura=primero.captura, resultado_yolo=primero.resultado,
+            tipo_codigo=vigilada.tipo_evento, clase_yolo=clase,
             t_deteccion_sensor=primero.t_solicitud, t_recepcion_servidor=primero.t_frame,
             t_inicio_inferencia=primero.t_inicio_inferencia, t_fin_inferencia=primero.t_fin_inferencia,
         )
-        self._ultima_incidencia_persona[codigo] = time.time()
+        self._ultima_incidencia[clave] = time.time()
         confirmados.clear()

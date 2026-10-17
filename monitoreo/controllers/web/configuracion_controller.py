@@ -81,6 +81,9 @@ class ProbarYoloController(LoginRequiredMixin, View):
             "tiempo_total_ms": tiempo_total_ms,
             "num_detecciones": len(resultado.cajas),
             "hay_persona": resultado.hay_persona,
+            "hay_alerta": resultado.hay_alerta,
+            "clases": resultado.resumen_clases or "(ninguna clase vigilada)",
+            "tipo_evento": resultado.tipo_evento_principal,
             "imagen_anotada_base64": (
                 base64.b64encode(resultado.imagen_anotada_jpg).decode("ascii")
                 if resultado.imagen_anotada_jpg else None

@@ -149,6 +149,7 @@ class PanelTiempoReal {
     }
     this._texto("camara-fps", datos.fps != null ? datos.fps : "—");
     this._texto("camara-personas", datos.personas != null ? datos.personas : "—");
+    this._texto("camara-clases", datos.resumen_clases || "—");
     this._texto("camara-latencia", datos.latencia_captura_ms != null
       ? Math.round(datos.latencia_captura_ms) : "—");
     this._texto("camara-metodo", datos.metodo === "stream" ? "stream MJPEG"
